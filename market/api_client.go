@@ -158,6 +158,7 @@ func (c *APIClient) GetCurrentPrice(symbol string) (float64, error) {
 
 	return price, nil
 }
+
 // GetOpenInterest 获取持仓量（P0修复：用于OI历史数据采集）
 func (c *APIClient) GetOpenInterest(symbol string) (*OIData, error) {
 	url := fmt.Sprintf("%s/fapi/v1/openInterest?symbol=%s", baseURL, symbol)
