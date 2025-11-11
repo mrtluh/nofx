@@ -39,6 +39,12 @@ type AutoTraderConfig struct {
 	AsterSigner     string // Aster API钱包地址
 	AsterPrivateKey string // Aster API钱包私钥
 
+	// OKX配置
+	OKXAPIKey     string // OKX API密钥
+	OKXSecretKey  string // OKX Secret密钥
+	OKXPassphrase string // OKX Passphrase
+	OKXTestnet    bool   // OKX测试网模式
+
 	CoinPoolAPIURL string
 
 	// AI配置
@@ -187,6 +193,12 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 		trader, err = NewAsterTrader(config.AsterUser, config.AsterSigner, config.AsterPrivateKey)
 		if err != nil {
 			return nil, fmt.Errorf("初始化Aster交易器失败: %w", err)
+		}
+	case "okx":
+		log.Printf("🏦 [%s] 使用OKX交易", config.Name)
+		trader, err = NewOKXTrader(config.OKXAPIKey, config.OKXSecretKey, config.OKXPassphrase, config.OKXTestnet)
+		if err != nil {
+			return nil, fmt.Errorf("初始化OKX交易器失败: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("不支持的交易平台: %s", config.Exchange)
@@ -458,13 +470,6 @@ func (at *AutoTrader) runCycle() error {
 	// 5. 调用AI获取完整决策
 	log.Printf("🤖 正在请求AI分析并决策... [模板: %s]", at.systemPromptTemplate)
 	decision, err := decision.GetFullDecisionWithCustomPrompt(ctx, at.mcpClient, at.customPrompt, at.overrideBasePrompt, at.systemPromptTemplate)
-
-	if decision != nil && decision.AIRequestDurationMs > 0 {
-		record.AIRequestDurationMs = decision.AIRequestDurationMs
-		log.Printf("⏱️ AI调用耗时: %.2f 秒", float64(record.AIRequestDurationMs)/1000)
-		record.ExecutionLog = append(record.ExecutionLog,
-			fmt.Sprintf("AI调用耗时: %d ms", record.AIRequestDurationMs))
-	}
 
 	// 即使有错误，也保存思维链、决策和输入prompt（用于debug）
 	if decision != nil {

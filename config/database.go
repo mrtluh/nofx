@@ -128,6 +128,8 @@ func (d *Database) createTables() error {
 			aster_user TEXT DEFAULT '',
 			aster_signer TEXT DEFAULT '',
 			aster_private_key TEXT DEFAULT '',
+			-- OKX 特定字段
+			okx_passphrase TEXT DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -373,6 +375,7 @@ func (d *Database) migrateExchangesTable() error {
 			aster_user TEXT DEFAULT '',
 			aster_signer TEXT DEFAULT '',
 			aster_private_key TEXT DEFAULT '',
+			okx_passphrase TEXT DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (id, user_id),
@@ -460,11 +463,13 @@ type ExchangeConfig struct {
 	// Reference: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/nonces-and-api-wallets
 	HyperliquidWalletAddr string `json:"hyperliquidWalletAddr"` // Main Wallet Address (holds funds, never expose private key)
 	// Aster 特定字段
-	AsterUser       string    `json:"asterUser"`
-	AsterSigner     string    `json:"asterSigner"`
-	AsterPrivateKey string    `json:"asterPrivateKey"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	AsterUser       string `json:"asterUser"`
+	AsterSigner     string `json:"asterSigner"`
+	AsterPrivateKey string `json:"asterPrivateKey"`
+	// OKX 特定字段
+	OKXPassphrase string    `json:"okxPassphrase"` // OKX API Passphrase
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // TraderRecord 交易员配置（数据库实体）
@@ -733,12 +738,13 @@ func (d *Database) UpdateAIModel(userID, id string, enabled bool, apiKey, custom
 // GetExchanges 获取用户的交易所配置
 func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 	rows, err := d.db.Query(`
-		SELECT id, user_id, name, type, enabled, api_key, secret_key, testnet, 
+		SELECT id, user_id, name, type, enabled, api_key, secret_key, testnet,
 		       COALESCE(hyperliquid_wallet_addr, '') as hyperliquid_wallet_addr,
 		       COALESCE(aster_user, '') as aster_user,
 		       COALESCE(aster_signer, '') as aster_signer,
 		       COALESCE(aster_private_key, '') as aster_private_key,
-		       created_at, updated_at 
+		       COALESCE(okx_passphrase, '') as okx_passphrase,
+		       created_at, updated_at
 		FROM exchanges WHERE user_id = ? ORDER BY id
 	`, userID)
 	if err != nil {
@@ -754,7 +760,7 @@ func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 			&exchange.ID, &exchange.UserID, &exchange.Name, &exchange.Type,
 			&exchange.Enabled, &exchange.APIKey, &exchange.SecretKey, &exchange.Testnet,
 			&exchange.HyperliquidWalletAddr, &exchange.AsterUser,
-			&exchange.AsterSigner, &exchange.AsterPrivateKey,
+			&exchange.AsterSigner, &exchange.AsterPrivateKey, &exchange.OKXPassphrase,
 			&exchange.CreatedAt, &exchange.UpdatedAt,
 		)
 		if err != nil {
@@ -765,6 +771,7 @@ func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 		exchange.APIKey = d.decryptSensitiveData(exchange.APIKey)
 		exchange.SecretKey = d.decryptSensitiveData(exchange.SecretKey)
 		exchange.AsterPrivateKey = d.decryptSensitiveData(exchange.AsterPrivateKey)
+		exchange.OKXPassphrase = d.decryptSensitiveData(exchange.OKXPassphrase)
 
 		exchanges = append(exchanges, &exchange)
 	}
@@ -773,8 +780,8 @@ func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 }
 
 // UpdateExchange 更新交易所配置，如果不存在则创建用户特定配置
-// 🔒 安全特性：空值不会覆盖现有的敏感字段（api_key, secret_key, aster_private_key）
-func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secretKey string, testnet bool, hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey string) error {
+// 🔒 安全特性：空值不会覆盖现有的敏感字段（api_key, secret_key, aster_private_key, okx_passphrase）
+func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secretKey string, testnet bool, hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey, okxPassphrase string) error {
 	log.Printf("🔧 UpdateExchange: userID=%s, id=%s, enabled=%v", userID, id, enabled)
 
 	// 构建动态 UPDATE SET 子句
@@ -806,6 +813,12 @@ func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secre
 		encryptedAsterPrivateKey := d.encryptSensitiveData(asterPrivateKey)
 		setClauses = append(setClauses, "aster_private_key = ?")
 		args = append(args, encryptedAsterPrivateKey)
+	}
+
+	if okxPassphrase != "" {
+		encryptedOKXPassphrase := d.encryptSensitiveData(okxPassphrase)
+		setClauses = append(setClauses, "okx_passphrase = ?")
+		args = append(args, encryptedOKXPassphrase)
 	}
 
 	// WHERE 条件
@@ -848,6 +861,9 @@ func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secre
 		} else if id == "aster" {
 			name = "Aster DEX"
 			typ = "dex"
+		} else if id == "okx" {
+			name = "OKX Futures"
+			typ = "cex"
 		} else {
 			name = id + " Exchange"
 			typ = "cex"
@@ -858,9 +874,9 @@ func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secre
 		// 创建用户特定的配置，使用原始的交易所ID
 		_, err = d.db.Exec(`
 			INSERT INTO exchanges (id, user_id, name, type, enabled, api_key, secret_key, testnet,
-			                       hyperliquid_wallet_addr, aster_user, aster_signer, aster_private_key, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-		`, id, userID, name, typ, enabled, apiKey, secretKey, testnet, hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey)
+			                       hyperliquid_wallet_addr, aster_user, aster_signer, aster_private_key, okx_passphrase, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+		`, id, userID, name, typ, enabled, apiKey, secretKey, testnet, hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey, okxPassphrase)
 
 		if err != nil {
 			log.Printf("❌ UpdateExchange: 创建记录失败: %v", err)

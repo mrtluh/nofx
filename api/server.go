@@ -451,6 +451,7 @@ type UpdateExchangeConfigRequest struct {
 		AsterUser             string `json:"aster_user"`
 		AsterSigner           string `json:"aster_signer"`
 		AsterPrivateKey       string `json:"aster_private_key"`
+		OKXPassphrase         string `json:"okx_passphrase"` // OKX API Passphrase
 	} `json:"exchanges"`
 }
 
@@ -570,6 +571,13 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 				exchangeCfg.AsterSigner,
 				exchangeCfg.AsterPrivateKey,
 			)
+		case "okx":
+			tempTrader, createErr = trader.NewOKXTrader(
+				exchangeCfg.APIKey,
+				exchangeCfg.SecretKey,
+				exchangeCfg.OKXPassphrase,
+				exchangeCfg.Testnet,
+			)
 		default:
 			log.Printf("⚠️ 不支持的交易所类型: %s，使用用户输入的初始资金", req.ExchangeID)
 		}
@@ -626,9 +634,9 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 
 	// 立即将新交易员加载到TraderManager中
-	err = s.traderManager.LoadTraderByID(s.database, userID, traderID)
+	err = s.traderManager.LoadUserTraders(s.database, userID)
 	if err != nil {
-		log.Printf("⚠️ 加载交易员到内存失败: %v", err)
+		log.Printf("⚠️ 加载用户交易员到内存失败: %v", err)
 		// 这里不返回错误，因为交易员已经成功创建到数据库
 	}
 
@@ -644,18 +652,17 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 
 // UpdateTraderRequest 更新交易员请求
 type UpdateTraderRequest struct {
-	Name                 string  `json:"name" binding:"required"`
-	AIModelID            string  `json:"ai_model_id" binding:"required"`
-	ExchangeID           string  `json:"exchange_id" binding:"required"`
-	InitialBalance       float64 `json:"initial_balance"`
-	ScanIntervalMinutes  int     `json:"scan_interval_minutes"`
-	BTCETHLeverage       int     `json:"btc_eth_leverage"`
-	AltcoinLeverage      int     `json:"altcoin_leverage"`
-	TradingSymbols       string  `json:"trading_symbols"`
-	CustomPrompt         string  `json:"custom_prompt"`
-	OverrideBasePrompt   bool    `json:"override_base_prompt"`
-	SystemPromptTemplate string  `json:"system_prompt_template"`
-	IsCrossMargin        *bool   `json:"is_cross_margin"`
+	Name                string  `json:"name" binding:"required"`
+	AIModelID           string  `json:"ai_model_id" binding:"required"`
+	ExchangeID          string  `json:"exchange_id" binding:"required"`
+	InitialBalance      float64 `json:"initial_balance"`
+	ScanIntervalMinutes int     `json:"scan_interval_minutes"`
+	BTCETHLeverage      int     `json:"btc_eth_leverage"`
+	AltcoinLeverage     int     `json:"altcoin_leverage"`
+	TradingSymbols      string  `json:"trading_symbols"`
+	CustomPrompt        string  `json:"custom_prompt"`
+	OverrideBasePrompt  bool    `json:"override_base_prompt"`
+	IsCrossMargin       *bool   `json:"is_cross_margin"`
 }
 
 // handleUpdateTrader 更新交易员配置
@@ -713,12 +720,6 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		scanIntervalMinutes = 3
 	}
 
-	// 设置提示词模板，允许更新
-	systemPromptTemplate := req.SystemPromptTemplate
-	if systemPromptTemplate == "" {
-		systemPromptTemplate = existingTrader.SystemPromptTemplate // 如果请求中没有提供，保持原值
-	}
-
 	// 更新交易员配置
 	trader := &config.TraderRecord{
 		ID:                   traderID,
@@ -732,7 +733,7 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		TradingSymbols:       req.TradingSymbols,
 		CustomPrompt:         req.CustomPrompt,
 		OverrideBasePrompt:   req.OverrideBasePrompt,
-		SystemPromptTemplate: systemPromptTemplate,
+		SystemPromptTemplate: existingTrader.SystemPromptTemplate, // 保持原值
 		IsCrossMargin:        isCrossMargin,
 		ScanIntervalMinutes:  scanIntervalMinutes,
 		IsRunning:            existingTrader.IsRunning, // 保持原值
@@ -746,9 +747,9 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 	}
 
 	// 重新加载交易员到内存
-	err = s.traderManager.LoadTraderByID(s.database, userID, traderID)
+	err = s.traderManager.LoadUserTraders(s.database, userID)
 	if err != nil {
-		log.Printf("⚠️ 重新加载交易员到内存失败: %v", err)
+		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
 	}
 
 	log.Printf("✓ 更新交易员成功: %s (模型: %s, 交易所: %s)", req.Name, req.AIModelID, req.ExchangeID)
@@ -792,14 +793,11 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 	traderID := c.Param("id")
 
 	// 校验交易员是否属于当前用户
-	traderRecord, _, _, err := s.database.GetTraderConfig(userID, traderID)
+	_, _, _, err := s.database.GetTraderConfig(userID, traderID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在或无访问权限"})
 		return
 	}
-
-	// 获取模板名称
-	templateName := traderRecord.SystemPromptTemplate
 
 	trader, err := s.traderManager.GetTrader(traderID)
 	if err != nil {
@@ -813,9 +811,6 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "交易员已在运行中"})
 		return
 	}
-
-	// 重新加载系统提示词模板（确保使用最新的硬盘文件）
-	s.reloadPromptTemplatesWithLog(templateName)
 
 	// 启动交易员
 	go func() {
@@ -944,6 +939,13 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 			exchangeCfg.AsterSigner,
 			exchangeCfg.AsterPrivateKey,
 		)
+	case "okx":
+		tempTrader, createErr = trader.NewOKXTrader(
+			exchangeCfg.APIKey,
+			exchangeCfg.SecretKey,
+			exchangeCfg.OKXPassphrase,
+			exchangeCfg.Testnet,
+		)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的交易所类型"})
 		return
@@ -997,9 +999,9 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 	}
 
 	// 重新加载交易员到内存
-	err = s.traderManager.LoadTraderByID(s.database, userID, traderID)
+	err = s.traderManager.LoadUserTraders(s.database, userID)
 	if err != nil {
-		log.Printf("⚠️ 重新加载交易员到内存失败: %v", err)
+		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
 	}
 
 	log.Printf("✅ 已同步余额: %.2f → %.2f USDT (%s %.2f%%)", oldBalance, actualBalance, changeType, changePercent)
@@ -1187,7 +1189,7 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 
 	// 更新每个交易所的配置
 	for exchangeID, exchangeData := range req.Exchanges {
-		err := s.database.UpdateExchange(userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Testnet, exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey)
+		err := s.database.UpdateExchange(userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Testnet, exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey, exchangeData.OKXPassphrase)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易所 %s 失败: %v", exchangeID, err)})
 			return
@@ -1311,22 +1313,21 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 	aiModelID := traderConfig.AIModelID
 
 	result := map[string]interface{}{
-		"trader_id":              traderConfig.ID,
-		"trader_name":            traderConfig.Name,
-		"ai_model":               aiModelID,
-		"exchange_id":            traderConfig.ExchangeID,
-		"initial_balance":        traderConfig.InitialBalance,
-		"scan_interval_minutes":  traderConfig.ScanIntervalMinutes,
-		"btc_eth_leverage":       traderConfig.BTCETHLeverage,
-		"altcoin_leverage":       traderConfig.AltcoinLeverage,
-		"trading_symbols":        traderConfig.TradingSymbols,
-		"custom_prompt":          traderConfig.CustomPrompt,
-		"override_base_prompt":   traderConfig.OverrideBasePrompt,
-		"system_prompt_template": traderConfig.SystemPromptTemplate,
-		"is_cross_margin":        traderConfig.IsCrossMargin,
-		"use_coin_pool":          traderConfig.UseCoinPool,
-		"use_oi_top":             traderConfig.UseOITop,
-		"is_running":             isRunning,
+		"trader_id":             traderConfig.ID,
+		"trader_name":           traderConfig.Name,
+		"ai_model":              aiModelID,
+		"exchange_id":           traderConfig.ExchangeID,
+		"initial_balance":       traderConfig.InitialBalance,
+		"scan_interval_minutes": traderConfig.ScanIntervalMinutes,
+		"btc_eth_leverage":      traderConfig.BTCETHLeverage,
+		"altcoin_leverage":      traderConfig.AltcoinLeverage,
+		"trading_symbols":       traderConfig.TradingSymbols,
+		"custom_prompt":         traderConfig.CustomPrompt,
+		"override_base_prompt":  traderConfig.OverrideBasePrompt,
+		"is_cross_margin":       traderConfig.IsCrossMargin,
+		"use_coin_pool":         traderConfig.UseCoinPool,
+		"use_oi_top":            traderConfig.UseOITop,
+		"is_running":            isRunning,
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -1730,21 +1731,8 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	// 检查邮箱是否已存在
-	existingUser, err := s.database.GetUserByEmail(req.Email)
+	_, err := s.database.GetUserByEmail(req.Email)
 	if err == nil {
-		// 如果用户未完成OTP验证，允许重新获取OTP（支持中断后恢复注册）
-		if !existingUser.OTPVerified {
-			qrCodeURL := auth.GetOTPQRCodeURL(existingUser.OTPSecret, req.Email)
-			c.JSON(http.StatusOK, gin.H{
-				"user_id":     existingUser.ID,
-				"email":       req.Email,
-				"otp_secret":  existingUser.OTPSecret,
-				"qr_code_url": qrCodeURL,
-				"message":     "检测到未完成的注册，请继续完成OTP设置",
-			})
-			return
-		}
-		// 用户已完成验证，拒绝重复注册
 		c.JSON(http.StatusConflict, gin.H{"error": "邮箱已被注册"})
 		return
 	}
@@ -2323,18 +2311,4 @@ func (s *Server) handleGetPublicTraderConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
-}
-
-// reloadPromptTemplatesWithLog 重新加载提示词模板并记录日志
-func (s *Server) reloadPromptTemplatesWithLog(templateName string) {
-	if err := decision.ReloadPromptTemplates(); err != nil {
-		log.Printf("⚠️  重新加载提示词模板失败: %v", err)
-		return
-	}
-
-	if templateName == "" {
-		log.Printf("✓ 已重新加载系统提示词模板 [当前使用: default (未指定，使用默认)]")
-	} else {
-		log.Printf("✓ 已重新加载系统提示词模板 [当前使用: %s]", templateName)
-	}
 }
