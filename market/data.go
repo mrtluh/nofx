@@ -5,61 +5,92 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
-// FundingRateCache 资金费率缓存结构
-// Binance Funding Rate 每 8 小时才更新一次，使用 1 小时缓存可显著减少 API 调用
-type FundingRateCache struct {
-	Rate      float64
-	UpdatedAt time.Time
+// Data 市场数据结构
+type Data struct {
+	Symbol            string
+	CurrentPrice      float64
+	PriceChange1h     float64 // 1小时价格变化百分比
+	PriceChange4h     float64 // 4小时价格变化百分比
+	CurrentEMA20      float64
+	CurrentMACD       float64
+	CurrentRSI14      float64
+	OpenInterest      *OIData
+	FundingRate       float64
+	IntradaySeries    *IntradayData
+	LongerTermContext *LongerTermData
 }
 
-var (
-	fundingRateMap sync.Map // map[string]*FundingRateCache
-	frCacheTTL     = 1 * time.Hour
-)
+// OIData Open Interest数据
+type OIData struct {
+	Latest  float64
+	Average float64
+}
+
+// IntradayData 日内数据(15分钟间隔)
+type IntradayData struct {
+	MidPrices   []float64
+	EMA20Values []float64
+	MACDValues  []float64
+	RSI7Values  []float64
+	RSI14Values []float64
+}
+
+// LongerTermData 长期数据(4小时时间框架)
+type LongerTermData struct {
+	EMA20         float64
+	EMA50         float64
+	ATR3          float64
+	ATR14         float64
+	CurrentVolume float64
+	AverageVolume float64
+	MACDValues    []float64
+	RSI14Values   []float64
+}
+
+// Kline K线数据
+type Kline struct {
+	OpenTime  int64
+	Open      float64
+	High      float64
+	Low       float64
+	Close     float64
+	Volume    float64
+	CloseTime int64
+}
 
 // Get 获取指定代币的市场数据
 func Get(symbol string) (*Data, error) {
-	var klines3m, klines4h []Kline
-	var err error
 	// 标准化symbol
 	symbol = Normalize(symbol)
-	// 获取3分钟K线数据 (最近10个)
-	klines3m, err = WSMonitorCli.GetCurrentKlines(symbol, "3m") // 多获取一些用于计算
+
+	// 获取15分钟K线数据 (最近10个)
+	klines15m, err := getKlines(symbol, "15m", 80) // 多获取一些用于计算
 	if err != nil {
-		return nil, fmt.Errorf("获取3分钟K线失败: %v", err)
+		return nil, fmt.Errorf("获取15分钟K线失败: %v", err)
 	}
 
 	// 获取4小时K线数据 (最近10个)
-	klines4h, err = WSMonitorCli.GetCurrentKlines(symbol, "4h") // 多获取用于计算指标
+	klines4h, err := getKlines(symbol, "4h", 60) // 多获取用于计算指标
 	if err != nil {
 		return nil, fmt.Errorf("获取4小时K线失败: %v", err)
 	}
 
-	// 检查数据是否为空
-	if len(klines3m) == 0 {
-		return nil, fmt.Errorf("3分钟K线数据为空")
-	}
-	if len(klines4h) == 0 {
-		return nil, fmt.Errorf("4小时K线数据为空")
-	}
-
-	// 计算当前指标 (基于3分钟最新数据)
-	currentPrice := klines3m[len(klines3m)-1].Close
-	currentEMA20 := calculateEMA(klines3m, 20)
-	currentMACD := calculateMACD(klines3m)
-	currentRSI7 := calculateRSI(klines3m, 7)
+	// 计算当前指标 (基于15分钟最新数据)
+	currentPrice := klines15m[len(klines15m)-1].Close
+	currentEMA20 := calculateEMA(klines15m, 20)
+	currentMACD := calculateMACD(klines15m)
+	currentRSI14 := calculateRSI(klines15m, 14)
 
 	// 计算价格变化百分比
-	// 1小时价格变化 = 20个3分钟K线前的价格
+	// 1小时价格变化 = 4个15分钟K线前的价格
 	priceChange1h := 0.0
-	if len(klines3m) >= 21 { // 至少需要21根K线 (当前 + 20根前)
-		price1hAgo := klines3m[len(klines3m)-21].Close
+	if len(klines15m) >= 5 { // 至少需要21根K线 (当前 + 20根前)
+		price1hAgo := klines15m[len(klines15m)-5].Close
 		if price1hAgo > 0 {
 			priceChange1h = ((currentPrice - price1hAgo) / price1hAgo) * 100
 		}
@@ -85,7 +116,7 @@ func Get(symbol string) (*Data, error) {
 	fundingRate, _ := getFundingRate(symbol)
 
 	// 计算日内系列数据
-	intradayData := calculateIntradaySeries(klines3m)
+	intradayData := calculateIntradaySeries(klines15m)
 
 	// 计算长期数据
 	longerTermData := calculateLongerTermData(klines4h)
@@ -97,12 +128,57 @@ func Get(symbol string) (*Data, error) {
 		PriceChange4h:     priceChange4h,
 		CurrentEMA20:      currentEMA20,
 		CurrentMACD:       currentMACD,
-		CurrentRSI7:       currentRSI7,
+		CurrentRSI14:      currentRSI14,
 		OpenInterest:      oiData,
 		FundingRate:       fundingRate,
 		IntradaySeries:    intradayData,
 		LongerTermContext: longerTermData,
 	}, nil
+}
+
+// getKlines 从Binance获取K线数据
+func getKlines(symbol, interval string, limit int) ([]Kline, error) {
+	url := fmt.Sprintf("https://fapi.binance.com/fapi/v1/klines?symbol=%s&interval=%s&limit=%d",
+		symbol, interval, limit)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var rawData [][]interface{}
+	if err := json.Unmarshal(body, &rawData); err != nil {
+		return nil, err
+	}
+
+	klines := make([]Kline, len(rawData))
+	for i, item := range rawData {
+		openTime := int64(item[0].(float64))
+		open, _ := parseFloat(item[1])
+		high, _ := parseFloat(item[2])
+		low, _ := parseFloat(item[3])
+		close, _ := parseFloat(item[4])
+		volume, _ := parseFloat(item[5])
+		closeTime := int64(item[6].(float64))
+
+		klines[i] = Kline{
+			OpenTime:  openTime,
+			Open:      open,
+			High:      high,
+			Low:       low,
+			Close:     close,
+			Volume:    volume,
+			CloseTime: closeTime,
+		}
+	}
+
+	return klines, nil
 }
 
 // calculateEMA 计算EMA
@@ -227,7 +303,6 @@ func calculateIntradaySeries(klines []Kline) *IntradayData {
 		MACDValues:  make([]float64, 0, 10),
 		RSI7Values:  make([]float64, 0, 10),
 		RSI14Values: make([]float64, 0, 10),
-		Volume:      make([]float64, 0, 10),
 	}
 
 	// 获取最近10个数据点
@@ -238,7 +313,6 @@ func calculateIntradaySeries(klines []Kline) *IntradayData {
 
 	for i := start; i < len(klines); i++ {
 		data.MidPrices = append(data.MidPrices, klines[i].Close)
-		data.Volume = append(data.Volume, klines[i].Volume)
 
 		// 计算每个点的EMA20
 		if i >= 19 {
@@ -263,26 +337,49 @@ func calculateIntradaySeries(klines []Kline) *IntradayData {
 		}
 	}
 
-	// 计算3m ATR14
-	data.ATR14 = calculateATR(klines, 14)
-
 	return data
 }
 
-// calculateLongerTermData 计算长期数据
+// calculateLongerTermData 计算长期数据（逻辑修复版）
 func calculateLongerTermData(klines []Kline) *LongerTermData {
+	// 处理空K线情况
+	if len(klines) == 0 {
+		return &LongerTermData{
+			MACDValues:  []float64{},
+			RSI14Values: []float64{},
+		}
+	}
+
 	data := &LongerTermData{
 		MACDValues:  make([]float64, 0, 10),
 		RSI14Values: make([]float64, 0, 10),
 	}
 
-	// 计算EMA
-	data.EMA20 = calculateEMA(klines, 20)
-	data.EMA50 = calculateEMA(klines, 50)
+	// 计算EMA（添加安全检查）
+	if len(klines) >= 20 {
+		data.EMA20 = calculateEMA(klines, 20)
+	} else {
+		data.EMA20 = 0
+	}
 
-	// 计算ATR
-	data.ATR3 = calculateATR(klines, 3)
-	data.ATR14 = calculateATR(klines, 14)
+	if len(klines) >= 50 {
+		data.EMA50 = calculateEMA(klines, 50)
+	} else {
+		data.EMA50 = 0
+	}
+
+	// 计算ATR（添加安全检查）
+	if len(klines) >= 3 {
+		data.ATR3 = calculateATR(klines, 3)
+	} else {
+		data.ATR3 = 0
+	}
+
+	if len(klines) >= 14 {
+		data.ATR14 = calculateATR(klines, 14)
+	} else {
+		data.ATR14 = 0
+	}
 
 	// 计算成交量
 	if len(klines) > 0 {
@@ -293,6 +390,9 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 			sum += k.Volume
 		}
 		data.AverageVolume = sum / float64(len(klines))
+	} else {
+		data.CurrentVolume = 0
+		data.AverageVolume = 0
 	}
 
 	// 计算MACD和RSI序列
@@ -301,11 +401,16 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 		start = 0
 	}
 
+	// 修复1: MACD需要26根K线才能计算（原代码错误地使用25）
+	// 修复2: RSI14需要15根K线才能计算（原代码错误地使用14）
 	for i := start; i < len(klines); i++ {
+		// MACD需要26根K线（0-25索引）
 		if i >= 25 {
 			macd := calculateMACD(klines[:i+1])
 			data.MACDValues = append(data.MACDValues, macd)
 		}
+
+		// RSI14需要15根K线（0-14索引）
 		if i >= 14 {
 			rsi14 := calculateRSI(klines[:i+1], 14)
 			data.RSI14Values = append(data.RSI14Values, rsi14)
@@ -319,8 +424,7 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 func getOpenInterestData(symbol string) (*OIData, error) {
 	url := fmt.Sprintf("https://fapi.binance.com/fapi/v1/openInterest?symbol=%s", symbol)
 
-	apiClient := NewAPIClient()
-	resp, err := apiClient.client.Get(url)
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -349,23 +453,11 @@ func getOpenInterestData(symbol string) (*OIData, error) {
 	}, nil
 }
 
-// getFundingRate 获取资金费率（优化：使用 1 小时缓存）
+// getFundingRate 获取资金费率
 func getFundingRate(symbol string) (float64, error) {
-	// 检查缓存（有效期 1 小时）
-	// Funding Rate 每 8 小时才更新，1 小时缓存非常合理
-	if cached, ok := fundingRateMap.Load(symbol); ok {
-		cache := cached.(*FundingRateCache)
-		if time.Since(cache.UpdatedAt) < frCacheTTL {
-			// 缓存命中，直接返回
-			return cache.Rate, nil
-		}
-	}
-
-	// 缓存过期或不存在，调用 API
 	url := fmt.Sprintf("https://fapi.binance.com/fapi/v1/premiumIndex?symbol=%s", symbol)
 
-	apiClient := NewAPIClient()
-	resp, err := apiClient.client.Get(url)
+	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
 	}
@@ -391,13 +483,6 @@ func getFundingRate(symbol string) (float64, error) {
 	}
 
 	rate, _ := strconv.ParseFloat(result.LastFundingRate, 64)
-
-	// 更新缓存
-	fundingRateMap.Store(symbol, &FundingRateCache{
-		Rate:      rate,
-		UpdatedAt: time.Now(),
-	})
-
 	return rate, nil
 }
 
@@ -405,26 +490,21 @@ func getFundingRate(symbol string) (float64, error) {
 func Format(data *Data) string {
 	var sb strings.Builder
 
-	// 使用动态精度格式化价格
-	priceStr := formatPriceWithDynamicPrecision(data.CurrentPrice)
-	sb.WriteString(fmt.Sprintf("current_price = %s, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
-		priceStr, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
+	sb.WriteString(fmt.Sprintf("current_price = %.2f, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
+		data.CurrentPrice, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI14))
 
 	sb.WriteString(fmt.Sprintf("In addition, here is the latest %s open interest and funding rate for perps:\n\n",
 		data.Symbol))
 
 	if data.OpenInterest != nil {
-		// 使用动态精度格式化 OI 数据
-		oiLatestStr := formatPriceWithDynamicPrecision(data.OpenInterest.Latest)
-		oiAverageStr := formatPriceWithDynamicPrecision(data.OpenInterest.Average)
-		sb.WriteString(fmt.Sprintf("Open Interest: Latest: %s Average: %s\n\n",
-			oiLatestStr, oiAverageStr))
+		sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n",
+			data.OpenInterest.Latest, data.OpenInterest.Average))
 	}
 
 	sb.WriteString(fmt.Sprintf("Funding Rate: %.2e\n\n", data.FundingRate))
 
 	if data.IntradaySeries != nil {
-		sb.WriteString("Intraday series (3‑minute intervals, oldest → latest):\n\n")
+		sb.WriteString("Intraday series (15‑minute intervals, oldest → latest):\n\n")
 
 		if len(data.IntradaySeries.MidPrices) > 0 {
 			sb.WriteString(fmt.Sprintf("Mid prices: %s\n\n", formatFloatSlice(data.IntradaySeries.MidPrices)))
@@ -445,12 +525,6 @@ func Format(data *Data) string {
 		if len(data.IntradaySeries.RSI14Values) > 0 {
 			sb.WriteString(fmt.Sprintf("RSI indicators (14‑Period): %s\n\n", formatFloatSlice(data.IntradaySeries.RSI14Values)))
 		}
-
-		if len(data.IntradaySeries.Volume) > 0 {
-			sb.WriteString(fmt.Sprintf("Volume: %s\n\n", formatFloatSlice(data.IntradaySeries.Volume)))
-		}
-
-		sb.WriteString(fmt.Sprintf("3m ATR (14‑period): %.3f\n\n", data.IntradaySeries.ATR14))
 	}
 
 	if data.LongerTermContext != nil {
@@ -477,42 +551,11 @@ func Format(data *Data) string {
 	return sb.String()
 }
 
-// formatPriceWithDynamicPrecision 根据价格区间动态选择精度
-// 这样可以完美支持从超低价 meme coin (< 0.0001) 到 BTC/ETH 的所有币种
-func formatPriceWithDynamicPrecision(price float64) string {
-	switch {
-	case price < 0.0001:
-		// 超低价 meme coin: 1000SATS, 1000WHY, DOGS
-		// 0.00002070 → "0.00002070" (8位小数)
-		return fmt.Sprintf("%.8f", price)
-	case price < 0.001:
-		// 低价 meme coin: NEIRO, HMSTR, HOT, NOT
-		// 0.00015060 → "0.000151" (6位小数)
-		return fmt.Sprintf("%.6f", price)
-	case price < 0.01:
-		// 中低价币: PEPE, SHIB, MEME
-		// 0.00556800 → "0.005568" (6位小数)
-		return fmt.Sprintf("%.6f", price)
-	case price < 1.0:
-		// 低价币: ASTER, DOGE, ADA, TRX
-		// 0.9954 → "0.9954" (4位小数)
-		return fmt.Sprintf("%.4f", price)
-	case price < 100:
-		// 中价币: SOL, AVAX, LINK, MATIC
-		// 23.4567 → "23.4567" (4位小数)
-		return fmt.Sprintf("%.4f", price)
-	default:
-		// 高价币: BTC, ETH (节省 Token)
-		// 45678.9123 → "45678.91" (2位小数)
-		return fmt.Sprintf("%.2f", price)
-	}
-}
-
-// formatFloatSlice 格式化float64切片为字符串（使用动态精度）
+// formatFloatSlice 格式化float64切片为字符串
 func formatFloatSlice(values []float64) string {
 	strValues := make([]string, len(values))
 	for i, v := range values {
-		strValues[i] = formatPriceWithDynamicPrecision(v)
+		strValues[i] = fmt.Sprintf("%.3f", v)
 	}
 	return "[" + strings.Join(strValues, ", ") + "]"
 }
