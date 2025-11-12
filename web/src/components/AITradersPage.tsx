@@ -105,7 +105,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     )
   }
 
-  const { data: traders, mutate: mutateTraders } = useSWR<TraderInfo[]>(
+  const { data: traders } = useSWR<TraderInfo[]>(
     user && token ? 'traders' : null,
     api.getTraders,
     { refreshInterval: 5000 }
@@ -372,7 +372,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           error: '启动失败',
         })
       }
-      mutateTraders()
+      cacheManager.onTraderStateChanged(traderId)
     } catch (error) {
       console.error('Failed to toggle trader:', error)
       toast.error(t('operationFailed', language))
