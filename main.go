@@ -209,13 +209,36 @@ func main() {
 		// 回退到数据库配置
 		jwtSecret, _ = database.GetSystemConfig("jwt_secret")
 		if jwtSecret == "" {
-			jwtSecret = "your-jwt-secret-key-change-in-production-make-it-long-and-random"
-			log.Printf("⚠️  使用默认JWT密钥，建议使用加密设置脚本生成安全密钥")
+			// 安全性增强：拒绝使用默认密钥，强制用户配置
+			log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			log.Println("❌ 错误：JWT_SECRET 未设置")
+			log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			log.Println("")
+			log.Println("为了安全性，本系统不允许使用默认 JWT 密钥。")
+			log.Println("请使用以下任一方法设置 JWT 密钥：")
+			log.Println("")
+			log.Println("方法 1: 设置环境变量（推荐）")
+			log.Println("  $ export JWT_SECRET=\"$(openssl rand -base64 32)\"")
+			log.Println("  $ ./nofx")
+			log.Println("")
+			log.Println("方法 2: 在 config.json 中设置")
+			log.Println("  {")
+			log.Println("    \"jwt_secret\": \"your-super-secret-random-key-at-least-32-chars\",")
+			log.Println("    ...")
+			log.Println("  }")
+			log.Println("")
+			log.Println("方法 3: 使用 Docker Compose")
+			log.Println("  environment:")
+			log.Println("    - JWT_SECRET=your-super-secret-random-key")
+			log.Println("")
+			log.Println("⚠️  重要：请使用至少 32 字符的随机字符串，不要使用弱密钥！")
+			log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			log.Fatal("服务启动失败：JWT_SECRET 未设置")
 		} else {
-			log.Printf("🔑 使用数据库中JWT密钥")
+			log.Printf("🔑 使用数据库中的 JWT 密钥")
 		}
 	} else {
-		log.Printf("🔑 使用环境变量JWT密钥")
+		log.Printf("🔑 使用环境变量 JWT 密钥")
 	}
 	auth.SetJWTSecret(jwtSecret)
 
