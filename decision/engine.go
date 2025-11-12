@@ -335,19 +335,24 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 	sb.WriteString(fmt.Sprintf("4. 杠杆限制: **山寨币最大%dx杠杆** | **BTC/ETH最大%dx杠杆** (⚠️ 严格执行，不可超过)\n", altcoinLeverage, btcEthLeverage))
 	sb.WriteString("5. 保证金: 总使用率 ≤ 90%\n")
 
-	// 6. 开仓金额：根据账户规模动态提示
-	sb.WriteString("6. 开仓金额: 山寨币≥12 USDT")
-	if accountEquity < 20.0 {
-		// 小账户特殊提示
-		sb.WriteString(" | BTC/ETH≥12 USDT (⚠️ 小账户模式，降低门槛)")
-	} else if accountEquity < 100.0 {
-		// 中型账户动态门槛
-		minBTCETH := calculateMinPositionSize("BTCUSDT", accountEquity)
-		sb.WriteString(fmt.Sprintf(" | BTC/ETH≥%.0f USDT (根据账户规模动态调整)", minBTCETH))
+	// 6. 开仓金额：根据账户规模动态提示（使用统一的配置规则）
+	minBTCETH := calculateMinPositionSize("BTCUSDT", accountEquity)
+
+	// 根据账户规模生成不同的提示语
+	var btcEthHint string
+	if accountEquity < btcEthSizeRules[1].MinEquity {
+		// 小账户模式（< 20U）
+		btcEthHint = fmt.Sprintf(" | BTC/ETH≥%.0f USDT (⚠️ 小账户模式，降低门槛)", minBTCETH)
+	} else if accountEquity < btcEthSizeRules[2].MinEquity {
+		// 中型账户（20-100U）
+		btcEthHint = fmt.Sprintf(" | BTC/ETH≥%.0f USDT (根据账户规模动态调整)", minBTCETH)
 	} else {
-		// 大账户标准门槛
-		sb.WriteString(" | BTC/ETH≥60 USDT")
+		// 大账户（≥100U）
+		btcEthHint = fmt.Sprintf(" | BTC/ETH≥%.0f USDT", minBTCETH)
 	}
+
+	sb.WriteString("6. 开仓金额: 山寨币≥12 USDT")
+	sb.WriteString(btcEthHint)
 	sb.WriteString("\n\n")
 
 	// 3. 输出格式 - 动态生成
