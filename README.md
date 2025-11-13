@@ -1409,7 +1409,6 @@ Pull requests automatically run:
 - Code linting and formatting checks
 
 For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ---
 
 ## 📈 Performance Optimization Tips
