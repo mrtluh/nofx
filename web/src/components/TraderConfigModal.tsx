@@ -29,6 +29,7 @@ interface TraderConfigData {
   scan_interval_minutes: number
   taker_fee_rate: number  // Taker 费率 (默认 0.0004 = 0.04%)
   maker_fee_rate: number  // Maker 费率 (默认 0.0002 = 0.02%)
+  timeframes: string      // 时间线选择 (逗号分隔，例如: "1m,4h,1d")
 }
 
 interface TraderConfigModalProps {
@@ -64,10 +65,11 @@ export function TraderConfigModal({
     is_cross_margin: true,
     use_coin_pool: false,
     use_oi_top: false,
-    initial_balance: 1000,
+    initial_balance: 100,
     scan_interval_minutes: 3,
     taker_fee_rate: 0.0004, // 默认 Binance Taker 费率 (0.04%)
     maker_fee_rate: 0.0002, // 默认 Binance Maker 费率 (0.02%)
+    timeframes: '4h',       // 默认只勾选 4 小时线
   })
   const [isSaving, setIsSaving] = useState(false)
   const [availableCoins, setAvailableCoins] = useState<string[]>([])
@@ -108,11 +110,19 @@ export function TraderConfigModal({
         is_cross_margin: true,
         use_coin_pool: false,
         use_oi_top: false,
-        initial_balance: 1000,
+        initial_balance: 100,
         scan_interval_minutes: 3,
         taker_fee_rate: 0.0004, // 默认 Binance Taker 费率 (0.04%)
         maker_fee_rate: 0.0002, // 默认 Binance Maker 费率 (0.02%)
+        timeframes: '4h',       // 默认只勾选 4 小时线
       })
+    }
+    // 确保旧数据也有默认的 timeframes 和 system_prompt_template
+    if (traderData && traderData.timeframes === undefined) {
+      setFormData((prev) => ({
+        ...prev,
+        timeframes: '4h',
+      }))
     }
     // 确保旧数据也有默认的 system_prompt_template
     if (traderData && traderData.system_prompt_template === undefined) {
@@ -263,6 +273,7 @@ export function TraderConfigModal({
         scan_interval_minutes: formData.scan_interval_minutes,
         taker_fee_rate: formData.taker_fee_rate,  // 添加 Taker 费率
         maker_fee_rate: formData.maker_fee_rate,  // 添加 Maker 费率
+        timeframes: formData.timeframes,          // 添加时间线选择
       }
       await toast.promise(onSave(saveData), {
         loading: '正在保存…',
@@ -496,12 +507,12 @@ export function TraderConfigModal({
                     onChange={(e) => {
                       const parsedValue = Number(e.target.value)
                       const safeValue = Number.isFinite(parsedValue)
-                        ? Math.max(3, parsedValue)
-                        : 3
+                        ? Math.max(1, parsedValue)
+                        : 1
                       handleInputChange('scan_interval_minutes', safeValue)
                     }}
                     className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
-                    min="3"
+                    min="1"
                     max="60"
                     step="1"
                   />
@@ -510,6 +521,66 @@ export function TraderConfigModal({
                   </p>
                 </div>
                 <div></div>
+              </div>
+
+              {/* 时间线选择 */}
+              <div>
+                <label className="text-sm text-[#EAECEF] block mb-3">
+                  📊 {language === 'zh' ? 'K线时间线选择' : 'Kline Timeframe Selection'}
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(() => {
+                    const interval = formData.scan_interval_minutes
+                    const baseFrames = [
+                      { value: '15m', label: '15分钟' },
+                      { value: '1h', label: '1小时' },
+                      { value: '4h', label: '4小时' },
+                      { value: '1d', label: '1天' },
+                    ]
+
+                    // 根据扫描间隔添加短周期线
+                    const frames = interval === 1
+                      ? [{ value: '1m', label: '1分钟' }, ...baseFrames]
+                      : interval === 3
+                      ? [{ value: '3m', label: '3分钟' }, ...baseFrames]
+                      : baseFrames
+
+                    const selectedFrames = formData.timeframes.split(',').filter(t => t)
+
+                    return frames.map((frame) => {
+                      const isSelected = selectedFrames.includes(frame.value)
+                      return (
+                        <button
+                          key={frame.value}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              // 取消勾选
+                              const newFrames = selectedFrames.filter(t => t !== frame.value)
+                              handleInputChange('timeframes', newFrames.join(','))
+                            } else {
+                              // 勾选
+                              handleInputChange('timeframes', [...selectedFrames, frame.value].join(','))
+                            }
+                          }}
+                          className="px-3 py-2 rounded text-sm font-medium transition-all"
+                          style={{
+                            backgroundColor: isSelected ? '#F0B90B' : '#0B0E11',
+                            border: `1px solid ${isSelected ? '#F0B90B' : '#2B3139'}`,
+                            color: isSelected ? '#000' : '#EAECEF',
+                          }}
+                        >
+                          {isSelected && '✓ '}{frame.label}
+                        </button>
+                      )
+                    })
+                  })()}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {language === 'zh'
+                    ? '根据扫描间隔自动调整：1分钟扫描只显示1分钟线，3分钟扫描只显示3分钟线。默认勾选4小时线。'
+                    : 'Auto-adjusted by scan interval: 1min scan shows 1m only, 3min scan shows 3m only. 4h is selected by default.'}
+                </p>
               </div>
 
               {/* 第三行：杠杆设置 */}
