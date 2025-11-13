@@ -704,43 +704,62 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 
 	// 查询 AI Model 和 Exchange 的自增 ID
+	log.Printf("🔍 [DEBUG] 步骤7: 查询用户 %s 的 AI 模型配置 (请求的 AI 模型: %s)...", userID, req.AIModelID)
 	aiModels, err := s.database.GetAIModels(userID)
 	if err != nil {
+		log.Printf("❌ [DEBUG] 查询 AI 模型失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取AI模型配置失败"})
 		return
 	}
+	log.Printf("✅ [DEBUG] 找到 %d 个 AI 模型配置", len(aiModels))
 
 	var aiModelIntID int
 	for _, model := range aiModels {
+		log.Printf("🔍 [DEBUG] 检查 AI 模型: ID=%d, ModelID=%s (寻找: %s)", model.ID, model.ModelID, req.AIModelID)
 		if model.ModelID == req.AIModelID {
 			aiModelIntID = model.ID
+			log.Printf("✅ [DEBUG] 找到匹配的 AI 模型: ID=%d", aiModelIntID)
 			break
 		}
 	}
 	if aiModelIntID == 0 {
+		log.Printf("❌ [DEBUG] 未找到 AI 模型 '%s'，可用的模型：", req.AIModelID)
+		for _, model := range aiModels {
+			log.Printf("   - ModelID=%s", model.ModelID)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("AI模型 %s 不存在", req.AIModelID)})
 		return
 	}
 
+	log.Printf("🔍 [DEBUG] 步骤8: 查询用户 %s 的交易所配置 (请求的交易所: %s)...", userID, req.ExchangeID)
 	exchanges, err := s.database.GetExchanges(userID)
 	if err != nil {
+		log.Printf("❌ [DEBUG] 查询交易所失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取交易所配置失败"})
 		return
 	}
+	log.Printf("✅ [DEBUG] 找到 %d 个交易所配置", len(exchanges))
 
 	var exchangeIntID int
 	for _, exchange := range exchanges {
+		log.Printf("🔍 [DEBUG] 检查交易所: ID=%d, ExchangeID=%s (寻找: %s)", exchange.ID, exchange.ExchangeID, req.ExchangeID)
 		if exchange.ExchangeID == req.ExchangeID {
 			exchangeIntID = exchange.ID
+			log.Printf("✅ [DEBUG] 找到匹配的交易所: ID=%d", exchangeIntID)
 			break
 		}
 	}
 	if exchangeIntID == 0 {
+		log.Printf("❌ [DEBUG] 未找到交易所 '%s'，可用的交易所：", req.ExchangeID)
+		for _, exchange := range exchanges {
+			log.Printf("   - ExchangeID=%s", exchange.ExchangeID)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("交易所 %s 不存在", req.ExchangeID)})
 		return
 	}
 
 	// 创建交易员配置（数据库实体）
+	log.Printf("🔍 [DEBUG] 步骤9: 构建交易员配置对象...")
 	trader := &config.TraderRecord{
 		ID:                   traderID,
 		UserID:               userID,
@@ -766,13 +785,17 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		Timeframes:           timeframes,          // 添加时间线选择
 		IsRunning:            false,
 	}
+	log.Printf("✅ [DEBUG] 交易员配置对象已构建: ID=%s, AIModelID=%d, ExchangeID=%d", traderID, aiModelIntID, exchangeIntID)
 
 	// 保存到数据库
+	log.Printf("🔍 [DEBUG] 步骤10: 保存交易员到数据库...")
 	err = s.database.CreateTrader(trader)
 	if err != nil {
+		log.Printf("❌ [DEBUG] 数据库 CreateTrader 失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建交易员失败: %v", err)})
 		return
 	}
+	log.Printf("✅ [DEBUG] 交易员已成功保存到数据库")
 
 	// 立即将新交易员加载到TraderManager中
 	err = s.traderManager.LoadTraderByID(s.database, userID, traderID)
