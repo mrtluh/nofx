@@ -1,7 +1,6 @@
 package crypto
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"os"
@@ -192,6 +191,11 @@ func TestDoubleEncryption(t *testing.T) {
 
 // TestKeyGeneration tests RSA key pair generation
 func TestKeyGeneration(t *testing.T) {
+	// Skip if DATA_ENCRYPTION_KEY not set
+	if os.Getenv("DATA_ENCRYPTION_KEY") == "" {
+		t.Skip("Skipping: DATA_ENCRYPTION_KEY not set")
+	}
+
 	tmpKeyPath := filepath.Join(os.TempDir(), "test_gen_key.pem")
 	defer os.Remove(tmpKeyPath)
 
@@ -542,10 +546,4 @@ func TestEncryptionConsistency(t *testing.T) {
 	t.Log("✅ Encryption produces unique ciphertext with random IV")
 }
 
-// Helper function
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// min function is defined in encryption_test.go

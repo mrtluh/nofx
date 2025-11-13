@@ -114,12 +114,12 @@ func (tm *TraderManager) LoadTradersFromDatabase(database *config.Database) erro
 			}
 		}
 		if aiModelCfg == nil {
-			log.Printf("⚠️  交易员 %s 的AI模型 %s 不存在，跳过", traderCfg.Name, traderCfg.AIModelID)
+			log.Printf("⚠️  交易员 %s 的AI模型 %d 不存在，跳过", traderCfg.Name, traderCfg.AIModelID)
 			continue
 		}
 
 		if !aiModelCfg.Enabled {
-			log.Printf("⚠️  交易员 %s 的AI模型 %s 未启用，跳过", traderCfg.Name, traderCfg.AIModelID)
+			log.Printf("⚠️  交易员 %s 的AI模型 %d 未启用，跳过", traderCfg.Name, traderCfg.AIModelID)
 			continue
 		}
 
@@ -139,12 +139,12 @@ func (tm *TraderManager) LoadTradersFromDatabase(database *config.Database) erro
 		}
 
 		if exchangeCfg == nil {
-			log.Printf("⚠️  交易员 %s 的交易所 %s 不存在，跳过", traderCfg.Name, traderCfg.ExchangeID)
+			log.Printf("⚠️  交易员 %s 的交易所 %d 不存在，跳过", traderCfg.Name, traderCfg.ExchangeID)
 			continue
 		}
 
 		if !exchangeCfg.Enabled {
-			log.Printf("⚠️  交易员 %s 的交易所 %s 未启用，跳过", traderCfg.Name, traderCfg.ExchangeID)
+			log.Printf("⚠️  交易员 %s 的交易所 %d 未启用，跳过", traderCfg.Name, traderCfg.ExchangeID)
 			continue
 		}
 
@@ -837,12 +837,12 @@ func (tm *TraderManager) LoadUserTraders(database *config.Database, userID strin
 			}
 		}
 		if aiModelCfg == nil {
-			log.Printf("⚠️ 交易员 %s 的AI模型 %s 不存在，跳过", traderCfg.Name, traderCfg.AIModelID)
+			log.Printf("⚠️ 交易员 %s 的AI模型 %d 不存在，跳过", traderCfg.Name, traderCfg.AIModelID)
 			continue
 		}
 
 		if !aiModelCfg.Enabled {
-			log.Printf("⚠️ 交易员 %s 的AI模型 %s 未启用，跳过", traderCfg.Name, traderCfg.AIModelID)
+			log.Printf("⚠️ 交易员 %s 的AI模型 %d 未启用，跳过", traderCfg.Name, traderCfg.AIModelID)
 			continue
 		}
 
@@ -856,12 +856,12 @@ func (tm *TraderManager) LoadUserTraders(database *config.Database, userID strin
 		}
 
 		if exchangeCfg == nil {
-			log.Printf("⚠️ 交易员 %s 的交易所 %s 不存在，跳过", traderCfg.Name, traderCfg.ExchangeID)
+			log.Printf("⚠️ 交易员 %s 的交易所 %d 不存在，跳过", traderCfg.Name, traderCfg.ExchangeID)
 			continue
 		}
 
 		if !exchangeCfg.Enabled {
-			log.Printf("⚠️ 交易员 %s 的交易所 %s 未启用，跳过", traderCfg.Name, traderCfg.ExchangeID)
+			log.Printf("⚠️ 交易员 %s 的交易所 %d 未启用，跳过", traderCfg.Name, traderCfg.ExchangeID)
 			continue
 		}
 
@@ -927,11 +927,11 @@ func (tm *TraderManager) LoadTraderByID(database *config.Database, userID, trade
 		}
 	}
 	if aiModelCfg == nil {
-		return fmt.Errorf("AI模型 %s 不存在", traderCfg.AIModelID)
+		return fmt.Errorf("AI模型 %d 不存在", traderCfg.AIModelID)
 	}
 
 	if !aiModelCfg.Enabled {
-		return fmt.Errorf("AI模型 %s 未启用", traderCfg.AIModelID)
+		return fmt.Errorf("AI模型 %d 未启用", traderCfg.AIModelID)
 	}
 
 	// 4. 查询交易所配置
@@ -949,11 +949,11 @@ func (tm *TraderManager) LoadTraderByID(database *config.Database, userID, trade
 	}
 
 	if exchangeCfg == nil {
-		return fmt.Errorf("交易所 %s 不存在", traderCfg.ExchangeID)
+		return fmt.Errorf("交易所 %d 不存在", traderCfg.ExchangeID)
 	}
 
 	if !exchangeCfg.Enabled {
-		return fmt.Errorf("交易所 %s 未启用", traderCfg.ExchangeID)
+		return fmt.Errorf("交易所 %d 未启用", traderCfg.ExchangeID)
 	}
 
 	// 5. 查询系统配置
