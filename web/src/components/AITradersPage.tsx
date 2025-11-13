@@ -110,7 +110,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     )
   }
 
-  const { data: traders } = useSWR<TraderInfo[]>(
+  const { data: traders, mutate: mutateTraders } = useSWR<TraderInfo[]>(
     user && token ? 'traders' : null,
     api.getTraders,
     { refreshInterval: 5000 }
@@ -275,6 +275,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         success: '创建成功',
         error: '创建失败',
       })
+
+      // Immediately refresh traders list for better UX
+      await mutateTraders()
+
       setShowCreateModal(false)
       cacheManager.onTraderCreated()
     } catch (error) {
@@ -334,6 +338,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         success: '保存成功',
         error: '保存失败',
       })
+
+      // Immediately refresh traders list for better UX
+      await mutateTraders()
+
       setShowEditModal(false)
       setEditingTrader(null)
       cacheManager.onTraderUpdated(traderId)
@@ -355,6 +363,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         success: '删除成功',
         error: '删除失败',
       })
+
+      // Immediately refresh traders list for better UX
+      await mutateTraders()
+
       cacheManager.onTraderDeleted(traderId)
     } catch (error) {
       console.error('Failed to delete trader:', error)
@@ -377,6 +389,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           error: '启动失败',
         })
       }
+
+      // Immediately refresh traders list to update running status
+      await mutateTraders()
+
       cacheManager.onTraderStateChanged(traderId)
     } catch (error) {
       console.error('Failed to toggle trader:', error)
