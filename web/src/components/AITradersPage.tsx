@@ -1624,13 +1624,17 @@ function SignalSourceModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         className="bg-gray-800 rounded-lg w-full max-w-lg relative my-8"
         style={{
           background: '#1E2329',
           maxHeight: 'calc(100vh - 4rem)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-xl font-bold mb-4" style={{ color: '#EAECEF' }}>
           {t('signalSourceConfig', language)}
@@ -1797,13 +1801,17 @@ function ModelConfigModal({
   const availableModels = allModels || []
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         className="bg-gray-800 rounded-lg w-full max-w-lg relative my-8"
         style={{
           background: '#1E2329',
           maxHeight: 'calc(100vh - 4rem)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div
           className="flex items-center justify-between p-6 pb-4 sticky top-0 z-10"
@@ -2315,13 +2323,17 @@ function ExchangeConfigModal({
   const availableExchanges = allExchanges || []
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         className="bg-gray-800 rounded-lg w-full max-w-lg relative my-8"
         style={{
           background: '#1E2329',
           maxHeight: 'calc(100vh - 4rem)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div
           className="flex items-center justify-between p-6 pb-4 sticky top-0 z-10"
@@ -2962,19 +2974,35 @@ function ExchangeConfigModal({
                       >
                         {t('hyperliquidAgentPrivateKey', language)} <span style={{ color: '#F6465D' }}>*</span>
                       </label>
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={t('enterHyperliquidAgentPrivateKey', language)}
-                        className="w-full px-3 py-2 rounded"
-                        style={{
-                          background: '#0B0E11',
-                          border: '1px solid #2B3139',
-                          color: '#EAECEF',
-                        }}
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type={showApiKey ? 'text' : 'password'}
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={t('enterHyperliquidAgentPrivateKey', language)}
+                          className="w-full px-3 py-2 pr-10 rounded"
+                          style={{
+                            background: '#0B0E11',
+                            border: '1px solid #2B3139',
+                            color: '#EAECEF',
+                          }}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded transition-colors"
+                          style={{
+                            color: '#848E9C',
+                            background: 'transparent'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(43, 49, 57, 0.6)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          title={showApiKey ? (language === 'zh' ? '隐藏' : 'Hide') : (language === 'zh' ? '显示' : 'Show')}
+                        >
+                          {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                       <div
                         className="text-xs mt-1"
                         style={{ color: '#848E9C' }}
