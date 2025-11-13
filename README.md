@@ -8,8 +8,6 @@
 
 **Languages:** [English](README.md) | [中文](docs/i18n/zh-CN/README.md) | [Українська](docs/i18n/uk/README.md) | [Русский](docs/i18n/ru/README.md) | [日本語](docs/i18n/ja/README.md)
 
-**Official Twitter:** [@nofx_ai](https://x.com/nofx_ai)
-
 **📚 Documentation:** [Docs Home](docs/README.md) | [Getting Started](docs/getting-started/README.md) | [Prompt Writing Guide](docs/prompt-guide.md) ([中文](docs/prompt-guide.zh-CN.md)) | [Changelog](CHANGELOG.md) | [Contributing](CONTRIBUTING.md) | [Security](SECURITY.md)
 
 ---
@@ -55,15 +53,12 @@
 ### 👥 Core Team
 
 - **Tinkle** - [@Web3Tinkle](https://x.com/Web3Tinkle)
-- **Tintin** - [@Tintinx2021](https://x.com/Tintinx2021)
 
 ### 💼 Seed Funding Round Open
 
-We are currently raising our **seed round**. 
+We are currently raising our **seed round**.
 
-**For investment inquiries**, please DM **Tinkle** or **Tintin** via Twitter.
-
-**For partnerships and collaborations**, please DM our official Twitter [@nofx_ai](https://x.com/nofx_ai).
+**For investment inquiries**, please DM **Tinkle** via Twitter.
 
 ---
 
@@ -319,30 +314,12 @@ Open your browser and visit: **http://localhost:3000**
 4. **Start Trading**: Launch your configured traders
 
 #### Manage Your System
-
-**Daily Operations:**
 ```bash
 ./start.sh logs      # View logs
 ./start.sh status    # Check status
 ./start.sh stop      # Stop services
-./start.sh restart   # Quick restart (containers only)
+./start.sh restart   # Restart services
 ```
-
-**After Code Changes:**
-```bash
-./start.sh start --build   # Rebuild and restart (required for code changes)
-```
-
-**When to use `start --build`:**
-- ✅ After modifying Go backend code (*.go files)
-- ✅ After modifying React frontend code (web/src/**/*.tsx, *.ts)
-- ✅ After changing Dockerfile or docker-compose.yml
-- ✅ After pulling latest code from git
-
-**When `restart` is enough:**
-- ✅ After changing config.json or .env (configuration only)
-- ✅ To recover from container crashes
-- ✅ For routine restarts
 
 **📖 For detailed Docker deployment guide, troubleshooting, and advanced configuration:**
 - **English**: See [docs/getting-started/docker-deploy.en.md](docs/getting-started/docker-deploy.en.md)
@@ -1303,112 +1280,6 @@ sudo apt-get install libta-lib0-dev
 - If API fails, system uses default mainstream coins (BTC, ETH, etc.)
 - ~~Check API URL and auth parameter in config.json~~ *Check configuration in web interface*
 
-### 6. WebSocket can't connect when using an HTTP/HTTPS proxy
-
-**Solution**:
-- Export standard proxy environment variables *before* starting the backend:
-  ```bash
-  export HTTPS_PROXY=http://<proxy-host>:<port>
-  export HTTP_PROXY=http://<proxy-host>:<port>
-
-  # If your proxy requires credentials
-  export HTTPS_PROXY=http://user:pass@<proxy-host>:<port>
-  export HTTP_PROXY=http://user:pass@<proxy-host>:<port>
-
-  # Start NOFX normally
-  ./start.sh
-  ```
-- **Docker Compose**: put the variables in `.env` or the service's `environment` block.
-- NOFX relies on Go's `http.ProxyFromEnvironment`, so every outbound request—including the Binance combined streams WebSocket—follows these proxy settings automatically when the variables are present.
-
----
-
-## 🧪 Developer Tools & Testing
-
-For contributors and developers working on NOFX, we provide convenient development tools via Makefile.
-
-### Quick Commands
-
-```bash
-# View all available commands
-make help
-
-# Testing
-make test              # Run all tests (backend + frontend)
-make test-backend      # Go tests only
-make test-frontend     # React/Vitest tests only
-make test-coverage     # Generate HTML coverage report
-
-# Build
-make build             # Build backend binary
-make build-frontend    # Build frontend production bundle
-
-# Development
-make run               # Run backend in dev mode
-make run-frontend      # Run frontend dev server (hot reload)
-
-# Code Quality
-make fmt               # Format Go code (go fmt)
-make lint              # Run linter (requires golangci-lint)
-make clean             # Clean all build artifacts
-
-# Docker
-make docker-build      # Build Docker images
-make docker-up         # Start all containers
-make docker-down       # Stop all containers
-make docker-logs       # View container logs
-
-# Dependencies
-make deps              # Download Go dependencies
-make deps-update       # Update all Go dependencies
-make deps-frontend     # Install frontend dependencies
-```
-
-### Manual Commands (Without Makefile)
-
-If you prefer not to use Makefile or don't have `make` installed:
-
-```bash
-# Backend tests
-go test ./...                            # Run all tests
-go test -v ./...                         # Verbose output
-go test -coverprofile=coverage.out ./... # Generate coverage
-go tool cover -html=coverage.out         # View coverage in browser
-
-# Frontend tests
-cd web
-npm run test          # Run Vitest tests
-npm run test:ui       # Interactive test UI
-
-# Build
-go build -o nofx                         # Backend
-cd web && npm run build                  # Frontend
-
-# Development
-go run main.go                           # Backend
-cd web && npm run dev                    # Frontend dev server
-
-# Code formatting
-go fmt ./...                             # Format Go code
-cd web && npm run lint                   # Lint frontend code
-```
-
-### Test Coverage Guidelines
-
-When contributing code:
-- ✅ All existing tests must pass
-- ✅ New features should include tests (aim for >80% coverage)
-- ✅ Critical paths (authentication, trading logic) require 100% coverage
-- ✅ Frontend components should have basic smoke tests
-
-### Continuous Integration
-
-Pull requests automatically run:
-- Backend tests (`go test ./...`)
-- Frontend build verification
-- Code linting and formatting checks
-
-For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
 ---
 
 ## 📈 Performance Optimization Tips

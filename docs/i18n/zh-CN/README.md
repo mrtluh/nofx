@@ -8,8 +8,6 @@
 
 **语言 / Languages:** [English](../../../README.md) | [中文](../zh-CN/README.md) | [Українська](../uk/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
 
-**官方推特:** [@nofx_ai](https://x.com/nofx_ai)
-
 **📚 文档中心:** [文档首页](../../README.md) | [快速开始](../../getting-started/README.zh-CN.md) | [更新日志](../../../CHANGELOG.zh-CN.md) | [社区指南](../../community/README.md)
 
 ---
@@ -57,15 +55,12 @@
 ### 👥 核心团队
 
 - **Tinkle** - [@Web3Tinkle](https://x.com/Web3Tinkle)
-- **Tintin** - [@Tintinx2021](https://x.com/Tintinx2021)
 
 ### 💼 种子轮融资进行中
 
 我们正在进行**种子轮融资**。
 
-**投资咨询**，请通过 Twitter 私信联系 **Tinkle** 或 **Tintin**。
-
-**商务合作**，请私信官方推特 [@nofx_ai](https://x.com/nofx_ai)。
+**投资咨询**，请通过 Twitter 私信联系 **Tinkle**。
 
 ---
 
@@ -1301,24 +1296,6 @@ sudo apt-get install libta-lib0-dev
 - 币种池API是可选的
 - 如果API失败，系统会使用默认主流币种（BTC、ETH等）
 - ~~检查config.json中的API URL和auth参数~~ *检查Web界面中的配置*
-
-### 6. 代理环境下 WebSocket 无法连接
-
-**解决**:
-- 启动后端前导出标准代理环境变量：
-  ```bash
-  export HTTPS_PROXY=http://<代理主机>:<端口>
-  export HTTP_PROXY=http://<代理主机>:<端口>
-
-  # 如果代理需要账号密码
-  export HTTPS_PROXY=http://用户名:密码@<代理主机>:<端口>
-  export HTTP_PROXY=http://用户名:密码@<代理主机>:<端口>
-
-  # 正常启动 NOFX
-  ./start.sh
-  ```
-- **Docker Compose**：将变量写到 `.env` 或 `docker-compose.yml` 的 `environment` 中。
-- NOFX 使用 Go 的 `http.ProxyFromEnvironment`，只要环境变量设置正确，包括 Binance 合并流在内的所有出站请求都会自动走代理。
 
 ---
 
