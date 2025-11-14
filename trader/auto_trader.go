@@ -689,7 +689,16 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		log.Printf("  ✓ Fetched %d open orders", len(openOrders))
 	}
 
-	// 7. Build context
+	// 7. Fetch recent trading history for AI learning (最近10條決策記錄)
+	recentDecisions, err := at.decisionLogger.GetLatestRecords(10)
+	if err != nil {
+		log.Printf("⚠️  Failed to fetch recent decisions: %v (AI won't see trading history)", err)
+		recentDecisions = []*logger.DecisionRecord{}
+	} else {
+		log.Printf("  ✓ Fetched %d recent decision records", len(recentDecisions))
+	}
+
+	// 8. Build context
 	ctx := &decision.Context{
 		CurrentTime:     time.Now().Format("2006-01-02 15:04:05"),
 		RuntimeMinutes:  int(time.Since(at.startTime).Minutes()),
@@ -708,10 +717,11 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 			MarginUsedPct:    marginUsedPct,
 			PositionCount:    len(positionInfos),
 		},
-		Positions:      positionInfos,
-		OpenOrders:     openOrders, // 添加未成交订单（用于 AI 了解挂单状态，避免重复下单）
-		CandidateCoins: candidateCoins,
-		Performance:    performance, // 添加历史表现分析
+		Positions:       positionInfos,
+		OpenOrders:      openOrders, // 添加未成交订单（用于 AI 了解挂单状态，避免重复下单）
+		CandidateCoins:  candidateCoins,
+		Performance:     performance,     // 添加历史表现分析
+		RecentDecisions: recentDecisions, // 添加历史决策记录（用于 AI 学习）
 	}
 
 	return ctx, nil

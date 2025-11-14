@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"nofx/logger"
 	"nofx/market"
 	"nofx/mcp"
 	"nofx/pool"
@@ -88,20 +89,21 @@ type OITopData struct {
 
 // Context 交易上下文（传递给AI的完整信息）
 type Context struct {
-	CurrentTime     string                  `json:"current_time"`
-	RuntimeMinutes  int                     `json:"runtime_minutes"`
-	CallCount       int                     `json:"call_count"`
-	Account         AccountInfo             `json:"account"`
-	Positions       []PositionInfo          `json:"positions"`
-	OpenOrders      []OpenOrderInfo         `json:"open_orders"` // List of open orders for AI context
-	CandidateCoins  []CandidateCoin         `json:"candidate_coins"`
-	MarketDataMap   map[string]*market.Data `json:"-"` // 不序列化，但内部使用
-	OITopDataMap    map[string]*OITopData   `json:"-"` // OI Top数据映射
-	Performance     interface{}             `json:"-"` // 历史表现分析（logger.PerformanceAnalysis）
-	BTCETHLeverage  int                     `json:"-"` // BTC/ETH杠杆倍数（从配置读取）
-	AltcoinLeverage int                     `json:"-"` // 山寨币杠杆倍数（从配置读取）
-	TakerFeeRate    float64                 `json:"-"` // Taker fee rate (from config, default 0.0004)
-	MakerFeeRate    float64                 `json:"-"` // Maker fee rate (from config, default 0.0002)
+	CurrentTime     string                   `json:"current_time"`
+	RuntimeMinutes  int                      `json:"runtime_minutes"`
+	CallCount       int                      `json:"call_count"`
+	Account         AccountInfo              `json:"account"`
+	Positions       []PositionInfo           `json:"positions"`
+	OpenOrders      []OpenOrderInfo          `json:"open_orders"` // List of open orders for AI context
+	CandidateCoins  []CandidateCoin          `json:"candidate_coins"`
+	MarketDataMap   map[string]*market.Data  `json:"-"` // 不序列化，但内部使用
+	OITopDataMap    map[string]*OITopData    `json:"-"` // OI Top数据映射
+	Performance     interface{}              `json:"-"` // 历史表现分析（logger.PerformanceAnalysis）
+	RecentDecisions []*logger.DecisionRecord `json:"-"` // Recent trading decisions for AI learning
+	BTCETHLeverage  int                      `json:"-"` // BTC/ETH杠杆倍数（从配置读取）
+	AltcoinLeverage int                      `json:"-"` // 山寨币杠杆倍数（从配置读取）
+	TakerFeeRate    float64                  `json:"-"` // Taker fee rate (from config, default 0.0004)
+	MakerFeeRate    float64                  `json:"-"` // Maker fee rate (from config, default 0.0002)
 }
 
 // Decision AI的交易决策
@@ -533,6 +535,70 @@ func buildUserPrompt(ctx *Context) string {
 				sb.WriteString(fmt.Sprintf("## 📊 夏普比率: %.2f\n\n", perfData.SharpeRatio))
 			}
 		}
+	}
+
+	// 历史交易记录（用于 AI 学习）
+	if len(ctx.RecentDecisions) > 0 {
+		sb.WriteString("## 📜 近期交易记录（最近10笔）\n\n")
+		for i, record := range ctx.RecentDecisions {
+			// 只显示有实际交易动作的记录（跳过 hold/wait）
+			if len(record.Decisions) == 0 {
+				continue
+			}
+
+			// 显示每笔交易
+			for _, action := range record.Decisions {
+				// 跳过 hold/wait
+				if action.Action == "hold" || action.Action == "wait" {
+					continue
+				}
+
+				// 判断交易结果（成功/失败）
+				resultIcon := "✅"
+				if !action.Success {
+					resultIcon = "❌"
+				}
+
+				// 格式化时间
+				timeStr := action.Timestamp.Format("01-02 15:04")
+
+				// 简化的展示格式
+				actionDesc := ""
+				switch action.Action {
+				case "open_long":
+					actionDesc = fmt.Sprintf("%s %d. [%s] %s LONG 开仓", resultIcon, i+1, timeStr, action.Symbol)
+					if action.Success {
+						actionDesc += fmt.Sprintf(" @ %.2f (%.0fx杠杆)", action.Price, float64(action.Leverage))
+					} else {
+						actionDesc += fmt.Sprintf(" 失败: %s", action.Error)
+					}
+				case "open_short":
+					actionDesc = fmt.Sprintf("%s %d. [%s] %s SHORT 开仓", resultIcon, i+1, timeStr, action.Symbol)
+					if action.Success {
+						actionDesc += fmt.Sprintf(" @ %.2f (%.0fx杠杆)", action.Price, float64(action.Leverage))
+					} else {
+						actionDesc += fmt.Sprintf(" 失败: %s", action.Error)
+					}
+				case "close_long", "close_short":
+					direction := "LONG"
+					if action.Action == "close_short" {
+						direction = "SHORT"
+					}
+					actionDesc = fmt.Sprintf("%s %d. [%s] %s %s 平仓 @ %.2f", resultIcon, i+1, timeStr, action.Symbol, direction, action.Price)
+				case "partial_close":
+					actionDesc = fmt.Sprintf("%s %d. [%s] %s 部分平仓 (%.0f%%)", resultIcon, i+1, timeStr, action.Symbol, action.Quantity)
+				case "update_stop_loss":
+					actionDesc = fmt.Sprintf("🛡️ %d. [%s] %s 移动止损 → %.2f", i+1, timeStr, action.Symbol, action.Price)
+				case "update_take_profit":
+					actionDesc = fmt.Sprintf("🎯 %d. [%s] %s 移动止盈 → %.2f", i+1, timeStr, action.Symbol, action.Price)
+				}
+
+				if actionDesc != "" {
+					sb.WriteString(actionDesc + "\n")
+				}
+			}
+		}
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("---\n\n")
