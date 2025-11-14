@@ -1192,6 +1192,12 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 	userID := c.GetString("user_id")
 	traderID := c.Param("id")
 
+	// 确保用户的交易员已加载到内存中（修复 404 问题）
+	err := s.traderManager.LoadUserTraders(s.database, userID)
+	if err != nil {
+		log.Printf("⚠️ 加载用户 %s 的交易员失败: %v", userID, err)
+	}
+
 	// 校验交易员是否属于当前用户
 	traderRecord, _, _, err := s.database.GetTraderConfig(userID, traderID)
 	if err != nil {
@@ -1241,8 +1247,14 @@ func (s *Server) handleStopTrader(c *gin.Context) {
 	userID := c.GetString("user_id")
 	traderID := c.Param("id")
 
+	// 确保用户的交易员已加载到内存中
+	err := s.traderManager.LoadUserTraders(s.database, userID)
+	if err != nil {
+		log.Printf("⚠️ 加载用户 %s 的交易员失败: %v", userID, err)
+	}
+
 	// 校验交易员是否属于当前用户
-	_, _, _, err := s.database.GetTraderConfig(userID, traderID)
+	_, _, _, err = s.database.GetTraderConfig(userID, traderID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在或无访问权限"})
 		return
