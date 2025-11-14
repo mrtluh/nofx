@@ -245,7 +245,16 @@ func main() {
 	}
 	auth.SetJWTSecret(jwtSecret)
 
-	// 管理员模式下需要管理员密码，缺失则退出
+	// 获取管理员模式配置（用於自動啟動功能）
+	// 默認為 true，除非顯式設置為 "false"
+	adminModeStr, _ := database.GetSystemConfig("admin_mode")
+	adminMode := adminModeStr != "false"
+
+	if adminMode {
+		log.Printf("ℹ️  Admin mode: enabled (服務重啟時自動恢復運行中的 traders)")
+	} else {
+		log.Printf("ℹ️  Admin mode: disabled (手動啟動模式)")
+	}
 
 	log.Printf("✓ 配置数据库初始化成功")
 	fmt.Println()
