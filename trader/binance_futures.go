@@ -1293,10 +1293,24 @@ func (t *FuturesTrader) GetOpenOrders(symbol string) ([]decision.OpenOrderInfo, 
 	// 轉換為 decision.OpenOrderInfo 格式
 	result := make([]decision.OpenOrderInfo, 0, len(orders))
 	for _, order := range orders {
-		// 解析價格和數量
-		price, _ := strconv.ParseFloat(order.Price, 64)
-		stopPrice, _ := strconv.ParseFloat(order.StopPrice, 64)
-		quantity, _ := strconv.ParseFloat(order.OrigQuantity, 64)
+		// 解析價格和數量（跳過無效數據）
+		price, err := strconv.ParseFloat(order.Price, 64)
+		if err != nil {
+			log.Printf("⚠️ 解析訂單價格失敗 (OrderID: %d): %v", order.OrderID, err)
+			continue
+		}
+
+		stopPrice, err := strconv.ParseFloat(order.StopPrice, 64)
+		if err != nil {
+			log.Printf("⚠️ 解析止損價失敗 (OrderID: %d): %v", order.OrderID, err)
+			stopPrice = 0 // 止損價可選，設置為0
+		}
+
+		quantity, err := strconv.ParseFloat(order.OrigQuantity, 64)
+		if err != nil {
+			log.Printf("⚠️ 解析訂單數量失敗 (OrderID: %d): %v", order.OrderID, err)
+			continue
+		}
 
 		orderInfo := decision.OpenOrderInfo{
 			Symbol:       order.Symbol,

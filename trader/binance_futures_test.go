@@ -210,7 +210,63 @@ func NewBinanceFuturesTestSuite(t *testing.T) *BinanceFuturesTestSuite {
 
 		// Mock ListOpenOrders - /fapi/v1/openOrders
 		case path == "/fapi/v1/openOrders":
-			respBody = []map[string]interface{}{}
+			// 根據 symbol 參數返回不同的測試數據
+			symbol := r.URL.Query().Get("symbol")
+			if symbol == "BTCUSDT" {
+				respBody = []map[string]interface{}{
+					{
+						"orderId":      int64(111111),
+						"symbol":       "BTCUSDT",
+						"status":       "NEW",
+						"type":         "LIMIT",
+						"side":         "BUY",
+						"positionSide": "LONG",
+						"price":        "45000.00",
+						"origQty":      "0.01",
+						"stopPrice":    "0",
+					},
+					{
+						"orderId":      int64(222222),
+						"symbol":       "BTCUSDT",
+						"status":       "NEW",
+						"type":         "STOP_MARKET",
+						"side":         "SELL",
+						"positionSide": "LONG",
+						"price":        "0",
+						"origQty":      "0.01",
+						"stopPrice":    "44000.00",
+					},
+				}
+			} else if symbol == "" {
+				// 查詢所有幣種
+				respBody = []map[string]interface{}{
+					{
+						"orderId":      int64(111111),
+						"symbol":       "BTCUSDT",
+						"status":       "NEW",
+						"type":         "LIMIT",
+						"side":         "BUY",
+						"positionSide": "LONG",
+						"price":        "45000.00",
+						"origQty":      "0.01",
+						"stopPrice":    "0",
+					},
+					{
+						"orderId":      int64(333333),
+						"symbol":       "ETHUSDT",
+						"status":       "NEW",
+						"type":         "LIMIT",
+						"side":         "SELL",
+						"positionSide": "SHORT",
+						"price":        "2900.00",
+						"origQty":      "0.1",
+						"stopPrice":    "0",
+					},
+				}
+			} else {
+				// 其他幣種返回空
+				respBody = []map[string]interface{}{}
+			}
 
 		// Mock CancelAllOrders - /fapi/v1/allOpenOrders (DELETE)
 		case path == "/fapi/v1/allOpenOrders" && r.Method == "DELETE":
@@ -613,4 +669,120 @@ func TestTradeOperationsInvalidateCache(t *testing.T) {
 		// 验证持仓缓存被清除
 		assert.Nil(t, trader.cachedPositions, "设置止盈后持仓缓存应该被清除")
 	})
+}
+
+// ============================================================
+// 五、GetOpenOrders 测试
+// ============================================================
+
+// TestGetOpenOrders_SpecificSymbol 测试查询特定币种的未成交订单
+func TestGetOpenOrders_SpecificSymbol(t *testing.T) {
+	suite := NewBinanceFuturesTestSuite(t)
+	defer suite.Cleanup()
+
+	trader := suite.Trader.(*FuturesTrader)
+
+	// 查询 BTCUSDT 的未成交订单
+	orders, err := trader.GetOpenOrders("BTCUSDT")
+
+	// 验证
+	assert.NoError(t, err)
+	assert.Len(t, orders, 2, "应该返回2个订单")
+
+	// 验证第一个订单（限价单）
+	assert.Equal(t, "BTCUSDT", orders[0].Symbol)
+	assert.Equal(t, int64(111111), orders[0].OrderID)
+	assert.Equal(t, "LIMIT", orders[0].Type)
+	assert.Equal(t, "BUY", orders[0].Side)
+	assert.Equal(t, "LONG", orders[0].PositionSide)
+	assert.Equal(t, 45000.0, orders[0].Price)
+	assert.Equal(t, 0.01, orders[0].Quantity)
+	assert.Equal(t, 0.0, orders[0].StopPrice)
+
+	// 验证第二个订单（止损单）
+	assert.Equal(t, "BTCUSDT", orders[1].Symbol)
+	assert.Equal(t, int64(222222), orders[1].OrderID)
+	assert.Equal(t, "STOP_MARKET", orders[1].Type)
+	assert.Equal(t, "SELL", orders[1].Side)
+	assert.Equal(t, 44000.0, orders[1].StopPrice)
+}
+
+// TestGetOpenOrders_AllSymbols 测试查询所有币种的未成交订单
+func TestGetOpenOrders_AllSymbols(t *testing.T) {
+	suite := NewBinanceFuturesTestSuite(t)
+	defer suite.Cleanup()
+
+	trader := suite.Trader.(*FuturesTrader)
+
+	// 查询所有未成交订单（symbol 为空字符串）
+	orders, err := trader.GetOpenOrders("")
+
+	// 验证
+	assert.NoError(t, err)
+	assert.Len(t, orders, 2, "应该返回2个订单（BTCUSDT和ETHUSDT）")
+
+	// 验证包含不同币种
+	symbols := make(map[string]bool)
+	for _, order := range orders {
+		symbols[order.Symbol] = true
+	}
+	assert.True(t, symbols["BTCUSDT"], "应该包含BTCUSDT订单")
+	assert.True(t, symbols["ETHUSDT"], "应该包含ETHUSDT订单")
+}
+
+// TestGetOpenOrders_EmptyResult 测试查询无订单的币种
+func TestGetOpenOrders_EmptyResult(t *testing.T) {
+	suite := NewBinanceFuturesTestSuite(t)
+	defer suite.Cleanup()
+
+	trader := suite.Trader.(*FuturesTrader)
+
+	// 查询没有订单的币种
+	orders, err := trader.GetOpenOrders("XRPUSDT")
+
+	// 验证
+	assert.NoError(t, err)
+	assert.Empty(t, orders, "应该返回空数组")
+}
+
+// TestGetOpenOrders_DifferentOrderTypes 测试不同类型的订单
+func TestGetOpenOrders_DifferentOrderTypes(t *testing.T) {
+	suite := NewBinanceFuturesTestSuite(t)
+	defer suite.Cleanup()
+
+	trader := suite.Trader.(*FuturesTrader)
+
+	orders, err := trader.GetOpenOrders("BTCUSDT")
+	assert.NoError(t, err)
+
+	// 验证包含不同类型的订单
+	orderTypes := make(map[string]bool)
+	for _, order := range orders {
+		orderTypes[order.Type] = true
+	}
+
+	assert.True(t, orderTypes["LIMIT"], "应该包含限价单")
+	assert.True(t, orderTypes["STOP_MARKET"], "应该包含止损单")
+}
+
+// TestGetOpenOrders_ParseFloatValues 测试价格和数量解析
+func TestGetOpenOrders_ParseFloatValues(t *testing.T) {
+	suite := NewBinanceFuturesTestSuite(t)
+	defer suite.Cleanup()
+
+	trader := suite.Trader.(*FuturesTrader)
+
+	orders, err := trader.GetOpenOrders("BTCUSDT")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, orders)
+
+	// 验证所有价格和数量都被正确解析为浮点数
+	for _, order := range orders {
+		// 数量应该大于0
+		assert.Greater(t, order.Quantity, 0.0, "数量应该大于0")
+
+		// 价格或止损价至少有一个大于0
+		hasValidPrice := order.Price > 0 || order.StopPrice > 0
+		assert.True(t, hasValidPrice, "价格或止损价至少有一个应该大于0")
+	}
 }
