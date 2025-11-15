@@ -803,6 +803,29 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 			totalRequired, requiredMargin, estimatedFee, availableBalance)
 	}
 
+	// ⚡ 严格验证止损/止盈价格（防止开仓后无法设置保护，导致仓位风险）
+	// 修复 Issue: 开仓成功但止损/止盈设置失败，仓位失去保护
+	if decision.StopLoss <= 0 || decision.TakeProfit <= 0 {
+		return fmt.Errorf("❌ 多单开仓失败：止损价 %.2f 和止盈价 %.2f 必须大于 0。"+
+			"建议：AI 必须为每个开仓决策设置合理的止损和止盈价格",
+			decision.StopLoss, decision.TakeProfit)
+	}
+
+	// 多单：止损必须 < 当前价，止盈必须 > 当前价
+	if decision.StopLoss >= marketData.CurrentPrice {
+		priceGapPct := ((decision.StopLoss - marketData.CurrentPrice) / marketData.CurrentPrice) * 100
+		return fmt.Errorf("❌ 多单止损价不合理：止损价 %.2f 必须低于当前价 %.2f (当前高出 %.2f%%)。"+
+			"建议：AI 应设置低于当前价的止损价，例如 %.2f",
+			decision.StopLoss, marketData.CurrentPrice, priceGapPct, marketData.CurrentPrice*0.98)
+	}
+
+	if decision.TakeProfit <= marketData.CurrentPrice {
+		priceGapPct := ((marketData.CurrentPrice - decision.TakeProfit) / marketData.CurrentPrice) * 100
+		return fmt.Errorf("❌ 多单止盈价不合理：止盈价 %.2f 必须高于当前价 %.2f (当前低于 %.2f%%)。"+
+			"建议：AI 应设置高于当前价的止盈价，例如 %.2f",
+			decision.TakeProfit, marketData.CurrentPrice, priceGapPct, marketData.CurrentPrice*1.02)
+	}
+
 	// 设置仓位模式
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
 		log.Printf("  ⚠️ 设置仓位模式失败: %v", err)
@@ -885,6 +908,29 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 	if totalRequired > availableBalance {
 		return fmt.Errorf("❌ 保证金不足: 需要 %.2f USDT（保证金 %.2f + 手续费 %.2f），可用 %.2f USDT",
 			totalRequired, requiredMargin, estimatedFee, availableBalance)
+	}
+
+	// ⚡ 严格验证止损/止盈价格（防止开仓后无法设置保护，导致仓位风险）
+	// 修复 Issue: 开仓成功但止损/止盈设置失败，仓位失去保护
+	if decision.StopLoss <= 0 || decision.TakeProfit <= 0 {
+		return fmt.Errorf("❌ 空单开仓失败：止损价 %.2f 和止盈价 %.2f 必须大于 0。"+
+			"建议：AI 必须为每个开仓决策设置合理的止损和止盈价格",
+			decision.StopLoss, decision.TakeProfit)
+	}
+
+	// 空单：止损必须 > 当前价，止盈必须 < 当前价
+	if decision.StopLoss <= marketData.CurrentPrice {
+		priceGapPct := ((marketData.CurrentPrice - decision.StopLoss) / marketData.CurrentPrice) * 100
+		return fmt.Errorf("❌ 空单止损价不合理：止损价 %.2f 必须高于当前价 %.2f (当前低于 %.2f%%)。"+
+			"建议：AI 应设置高于当前价的止损价，例如 %.2f",
+			decision.StopLoss, marketData.CurrentPrice, priceGapPct, marketData.CurrentPrice*1.02)
+	}
+
+	if decision.TakeProfit >= marketData.CurrentPrice {
+		priceGapPct := ((decision.TakeProfit - marketData.CurrentPrice) / marketData.CurrentPrice) * 100
+		return fmt.Errorf("❌ 空单止盈价不合理：止盈价 %.2f 必须低于当前价 %.2f (当前高出 %.2f%%)。"+
+			"建议：AI 应设置低于当前价的止盈价，例如 %.2f",
+			decision.TakeProfit, marketData.CurrentPrice, priceGapPct, marketData.CurrentPrice*0.98)
 	}
 
 	// 设置仓位模式
@@ -1348,18 +1394,50 @@ func (at *AutoTrader) executePartialCloseWithRecord(decision *decision.Decision,
 	// IMPORTANT: Exchanges like Binance automatically cancel existing TP/SL orders after partial close (due to quantity mismatch)
 	// If AI provides new stop-loss/take-profit prices, reset protection for the remaining position
 	if decision.NewStopLoss > 0 {
-		log.Printf("  → Restoring stop-loss for remaining position %.4f: %.2f", remainingQuantity, decision.NewStopLoss)
-		err = at.trader.SetStopLoss(decision.Symbol, positionSide, remainingQuantity, decision.NewStopLoss)
-		if err != nil {
-			log.Printf("  ⚠️ Failed to restore stop-loss: %v (doesn't affect close result)", err)
+		// ⚡ 验证止损价格合理性（防止 code=-2021 错误）
+		isValidStopLoss := false
+		if positionSide == "LONG" && decision.NewStopLoss < marketData.CurrentPrice {
+			isValidStopLoss = true
+		} else if positionSide == "SHORT" && decision.NewStopLoss > marketData.CurrentPrice {
+			isValidStopLoss = true
+		}
+
+		if isValidStopLoss {
+			log.Printf("  → Restoring stop-loss for remaining position %.4f: %.2f", remainingQuantity, decision.NewStopLoss)
+			err = at.trader.SetStopLoss(decision.Symbol, positionSide, remainingQuantity, decision.NewStopLoss)
+			if err != nil {
+				log.Printf("  ⚠️ Failed to restore stop-loss: %v (doesn't affect close result)", err)
+			}
+		} else {
+			priceGapPct := math.Abs((decision.NewStopLoss-marketData.CurrentPrice)/marketData.CurrentPrice) * 100
+			log.Printf("  ⚠️⚠️ 跳过设置止损：价格不合理 (止损 %.2f, 当前 %.2f, 差距 %.2f%%)",
+				decision.NewStopLoss, marketData.CurrentPrice, priceGapPct)
+			log.Printf("  → %s仓位的止损必须%s当前价，剩余仓位目前没有止损保护",
+				positionSide, map[string]string{"LONG": "低于", "SHORT": "高于"}[positionSide])
 		}
 	}
 
 	if decision.NewTakeProfit > 0 {
-		log.Printf("  → Restoring take-profit for remaining position %.4f: %.2f", remainingQuantity, decision.NewTakeProfit)
-		err = at.trader.SetTakeProfit(decision.Symbol, positionSide, remainingQuantity, decision.NewTakeProfit)
-		if err != nil {
-			log.Printf("  ⚠️ Failed to restore take-profit: %v (doesn't affect close result)", err)
+		// ⚡ 验证止盈价格合理性（防止 code=-2021 错误）
+		isValidTakeProfit := false
+		if positionSide == "LONG" && decision.NewTakeProfit > marketData.CurrentPrice {
+			isValidTakeProfit = true
+		} else if positionSide == "SHORT" && decision.NewTakeProfit < marketData.CurrentPrice {
+			isValidTakeProfit = true
+		}
+
+		if isValidTakeProfit {
+			log.Printf("  → Restoring take-profit for remaining position %.4f: %.2f", remainingQuantity, decision.NewTakeProfit)
+			err = at.trader.SetTakeProfit(decision.Symbol, positionSide, remainingQuantity, decision.NewTakeProfit)
+			if err != nil {
+				log.Printf("  ⚠️ Failed to restore take-profit: %v (doesn't affect close result)", err)
+			}
+		} else {
+			priceGapPct := math.Abs((decision.NewTakeProfit-marketData.CurrentPrice)/marketData.CurrentPrice) * 100
+			log.Printf("  ⚠️⚠️ 跳过设置止盈：价格不合理 (止盈 %.2f, 当前 %.2f, 差距 %.2f%%)",
+				decision.NewTakeProfit, marketData.CurrentPrice, priceGapPct)
+			log.Printf("  → %s仓位的止盈必须%s当前价，剩余仓位目前没有止盈保护",
+				positionSide, map[string]string{"LONG": "高于", "SHORT": "低于"}[positionSide])
 		}
 	}
 
