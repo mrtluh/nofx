@@ -61,6 +61,54 @@ func NewServer(traderManager *manager.TraderManager, database *config.Database, 
 		}
 	}
 
+	// 生产环境 CORS 配置检查
+	isDevelopment := os.Getenv("ENVIRONMENT") != "production"
+	corsConfigured := os.Getenv("CORS_ALLOWED_ORIGINS") != "" || os.Getenv("FRONTEND_URL") != ""
+	disableCORS := strings.EqualFold(os.Getenv("DISABLE_CORS"), "true")
+
+	if !isDevelopment && !corsConfigured && !disableCORS {
+		log.Println("")
+		log.Println("╔═══════════════════════════════════════════════════════════════════╗")
+		log.Println("║  ⚠️  警告：生產模式下未配置 CORS！                                ║")
+		log.Println("╟───────────────────────────────────────────────────────────────────╢")
+		log.Println("║  當前狀態：                                                        ║")
+		log.Println("║    • ENVIRONMENT=production（生產模式）                           ║")
+		log.Println("║    • CORS_ALLOWED_ORIGINS 未設置                                  ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  預期行為：                                                        ║")
+		log.Println("║    ✅ localhost:3000, localhost:5173 可正常訪問                   ║")
+		log.Println("║    ❌ 其他所有來源將被 403 拒絕（包括域名、公網 IP）              ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  解決方案（選擇其一）：                                            ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  1️⃣  配置允許的前端域名（推薦用於生產環境）：                     ║")
+		log.Println("║      在 .env 中添加：                                             ║")
+		log.Println("║      CORS_ALLOWED_ORIGINS=https://yourdomain.com                 ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  2️⃣  切換回開發模式（不設置 ENVIRONMENT 或設為其他值）：           ║")
+		log.Println("║      移除或註釋 .env 中的：                                       ║")
+		log.Println("║      # ENVIRONMENT=production                                    ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  3️⃣  完全禁用 CORS（僅限安全的內網環境）：                        ║")
+		log.Println("║      在 .env 中添加：                                             ║")
+		log.Println("║      DISABLE_CORS=true                                           ║")
+		log.Println("║                                                                   ║")
+		log.Println("║  修改後需重啟容器：                                                ║")
+		log.Println("║      docker-compose restart                                      ║")
+		log.Println("╚═══════════════════════════════════════════════════════════════════╝")
+		log.Println("")
+	} else if isDevelopment {
+		log.Println("🔧 [CORS] 開發模式啟動：自動允許 localhost、.local 域名和私有 IP")
+		if len(allowedOrigins) > 2 {
+			log.Printf("    已配置額外白名單：%v", allowedOrigins[2:])
+		}
+	} else if disableCORS {
+		log.Println("⚠️  [CORS] CORS 檢查已完全禁用 (DISABLE_CORS=true)")
+	} else {
+		log.Println("🔒 [CORS] 生產模式啟動：嚴格執行白名單")
+		log.Printf("    允許的來源：%v", allowedOrigins)
+	}
+
 	// 启用 CORS（白名单模式）
 	router.Use(corsMiddleware(allowedOrigins))
 
