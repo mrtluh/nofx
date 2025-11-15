@@ -41,7 +41,7 @@ type AutoTraderConfig struct {
 	AsterPrivateKey string // Aster API钱包私钥
 
 	CoinPoolAPIURL string
-	OITopAPIURL  string
+	OITopAPIURL    string
 
 	// AI配置
 	UseQwen     bool

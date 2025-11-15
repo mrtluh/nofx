@@ -720,10 +720,10 @@ func TestGetOpenOrders_Integration(t *testing.T) {
 func TestGetOpenOrders_SymbolFilter(t *testing.T) {
 	// 这是一个纯逻辑测试，验证 symbol 过滤逻辑
 	tests := []struct {
-		name           string
-		requestSymbol  string
-		orderCoins     []string
-		expectedCoins  []string
+		name          string
+		requestSymbol string
+		orderCoins    []string
+		expectedCoins []string
 	}{
 		{
 			name:          "请求 BTCUSDT，只返回 BTC",
@@ -779,9 +779,9 @@ func TestGetOpenOrders_OrderInfoConversion(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		mockOrder     mockHyperliquidOrder
-		expectedInfo  func(t *testing.T, info decision.OpenOrderInfo)
+		name         string
+		mockOrder    mockHyperliquidOrder
+		expectedInfo func(t *testing.T, info decision.OpenOrderInfo)
 	}{
 		{
 			name: "BTC多单转换",

@@ -304,5 +304,4 @@ func TestPublicTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	}
 }
 
-
 // Trader ID tests moved to api/traderid_test.go

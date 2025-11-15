@@ -207,34 +207,34 @@ func TestDataAgeCalculation(t *testing.T) {
 	now := time.Now()
 
 	testCases := []struct {
-		name           string
-		dataTime       time.Time
-		maxAge         time.Duration
-		shouldBeStale  bool
+		name          string
+		dataTime      time.Time
+		maxAge        time.Duration
+		shouldBeStale bool
 	}{
 		{
-			name:           "Fresh data - 1 minute old",
-			dataTime:       now.Add(-1 * time.Minute),
-			maxAge:         5 * time.Minute,
-			shouldBeStale:  false,
+			name:          "Fresh data - 1 minute old",
+			dataTime:      now.Add(-1 * time.Minute),
+			maxAge:        5 * time.Minute,
+			shouldBeStale: false,
 		},
 		{
-			name:           "Boundary - exactly 5 minutes old",
-			dataTime:       now.Add(-5 * time.Minute),
-			maxAge:         5 * time.Minute,
-			shouldBeStale:  false,
+			name:          "Boundary - exactly 5 minutes old",
+			dataTime:      now.Add(-5 * time.Minute),
+			maxAge:        5 * time.Minute,
+			shouldBeStale: false,
 		},
 		{
-			name:           "Stale - 5 minutes 1 second old",
-			dataTime:       now.Add(-5*time.Minute - 1*time.Second),
-			maxAge:         5 * time.Minute,
-			shouldBeStale:  true,
+			name:          "Stale - 5 minutes 1 second old",
+			dataTime:      now.Add(-5*time.Minute - 1*time.Second),
+			maxAge:        5 * time.Minute,
+			shouldBeStale: true,
 		},
 		{
-			name:           "Very stale - 6 hours old",
-			dataTime:       now.Add(-6 * time.Hour),
-			maxAge:         5 * time.Minute,
-			shouldBeStale:  true,
+			name:          "Very stale - 6 hours old",
+			dataTime:      now.Add(-6 * time.Hour),
+			maxAge:        5 * time.Minute,
+			shouldBeStale: true,
 		},
 	}
 

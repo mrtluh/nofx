@@ -236,8 +236,8 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		IsCrossMargin:         traderCfg.IsCrossMargin,
 		DefaultCoins:          defaultCoins,
 		TradingCoins:          tradingCoins,
-		UseCoinPool:           traderCfg.UseCoinPool, // 币种池信号源配置
-		UseOITop:              traderCfg.UseOITop,    // OI Top 信号源配置
+		UseCoinPool:           traderCfg.UseCoinPool,          // 币种池信号源配置
+		UseOITop:              traderCfg.UseOITop,             // OI Top 信号源配置
 		SystemPromptTemplate:  traderCfg.SystemPromptTemplate, // 系统提示词模板
 		OrderStrategy:         traderCfg.OrderStrategy,        // 订单策略
 		LimitPriceOffset:      traderCfg.LimitPriceOffset,     // 限价偏移
@@ -350,8 +350,8 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		IsCrossMargin:         traderCfg.IsCrossMargin,
 		DefaultCoins:          defaultCoins,
 		TradingCoins:          tradingCoins,
-		UseCoinPool:           traderCfg.UseCoinPool, // 币种池信号源配置
-		UseOITop:              traderCfg.UseOITop,    // OI Top 信号源配置
+		UseCoinPool:           traderCfg.UseCoinPool,          // 币种池信号源配置
+		UseOITop:              traderCfg.UseOITop,             // OI Top 信号源配置
 		SystemPromptTemplate:  traderCfg.SystemPromptTemplate, // 系统提示词模板
 		OrderStrategy:         traderCfg.OrderStrategy,        // 订单策略
 		LimitPriceOffset:      traderCfg.LimitPriceOffset,     // 限价偏移
