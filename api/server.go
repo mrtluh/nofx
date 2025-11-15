@@ -68,13 +68,21 @@ func NewServer(traderManager *manager.TraderManager, database *config.Database, 
 	globalLimiter := middleware.NewIPRateLimiter(rate.Limit(10), 10)
 	router.Use(middleware.RateLimitMiddleware(globalLimiter))
 
-	// 启用 CSRF 保护（Double Submit Cookie 模式）
-	csrfConfig := middleware.DefaultCSRFConfig()
-	// 生产环境应启用 HTTPS-only Cookie
-	if os.Getenv("ENVIRONMENT") == "production" {
-		csrfConfig.CookieSecure = true
+	// CSRF 保护（Double Submit Cookie 模式）- 可通过环境变量控制
+	// 开发阶段默认关闭以避免频繁 403 错误，生产环境建议启用
+	enableCSRF := os.Getenv("ENABLE_CSRF")
+	if enableCSRF == "true" {
+		log.Println("✅ [CSRF] CSRF 保护已启用")
+		csrfConfig := middleware.DefaultCSRFConfig()
+		// 生产环境应启用 HTTPS-only Cookie
+		if os.Getenv("ENVIRONMENT") == "production" {
+			csrfConfig.CookieSecure = true
+		}
+		router.Use(middleware.CSRFMiddleware(csrfConfig))
+	} else {
+		log.Println("⚠️  [CSRF] CSRF 保护已禁用（开发模式）")
+		log.Println("    提示：生产环境请设置 ENABLE_CSRF=true")
 	}
-	router.Use(middleware.CSRFMiddleware(csrfConfig))
 
 	// 创建加密处理器
 	cryptoHandler := NewCryptoHandler(cryptoService)
@@ -111,7 +119,7 @@ func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
 		} else if origin != "" {
 			// 如果有 Origin 但不在白名单中，记录并拒绝
 			log.Printf("⚠️ [CORS] 拒绝来源: %s (允许的来源: %v)", origin, allowedOrigins)
