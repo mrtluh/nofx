@@ -187,13 +187,13 @@ func convertCandleToKline(candle hyperliquid.Candle) (Kline, error) {
 
 	kline = Kline{
 		OpenTime:  candle.Time,      // 开盘时间（毫秒）
-		Open:      open,              // 开盘价
-		High:      high,              // 最高价
-		Low:       low,               // 最低价
-		Close:     close,             // 收盘价
-		Volume:    volume,            // 成交量
-		CloseTime: candle.Timestamp,  // 收盘时间（毫秒）
-		Trades:    candle.Number,     // 成交笔数
+		Open:      open,             // 开盘价
+		High:      high,             // 最高价
+		Low:       low,              // 最低价
+		Close:     close,            // 收盘价
+		Volume:    volume,           // 成交量
+		CloseTime: candle.Timestamp, // 收盘时间（毫秒）
+		Trades:    candle.Number,    // 成交笔数
 		// Hyperliquid 不提供以下字段，使用默认值 0
 		QuoteVolume:         0,
 		TakerBuyBaseVolume:  0,

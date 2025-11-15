@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -407,6 +408,22 @@ func main() {
 		}
 	}()
 
+	// 初始化多数据源管理器（健康检查间隔: 60秒）
+	log.Println("🌐 初始化多数据源管理器...")
+	dataSourceManager := market.NewDataSourceManager(60 * time.Second)
+
+	// 添加 Binance 数据源
+	binanceSource := market.NewBinanceDataSource()
+	dataSourceManager.AddSource(binanceSource)
+
+	// 添加 Hyperliquid 数据源（主网）
+	hyperliquidSource := market.NewHyperliquidDataSource(false)
+	dataSourceManager.AddSource(hyperliquidSource)
+
+	// 启动健康检查
+	dataSourceManager.Start()
+	log.Printf("✅ 数据源管理器已启动，包含 %d 个数据源", 2)
+
 	// 启动流行情数据 - 默认使用所有交易员设置的币种 如果没有设置币种 则优先使用系统默认
 	// 获取所有活跃 trader 的时间线配置（合并后的并集）
 	timeframes := database.GetAllTimeframes()
@@ -441,6 +458,11 @@ func main() {
 	} else {
 		log.Println("✅ API 服务器已安全关闭")
 	}
+
+	// 步骤 2.5: 停止数据源管理器
+	log.Println("🌐 停止数据源管理器...")
+	dataSourceManager.Stop()
+	log.Println("✅ 数据源管理器已停止")
 
 	// 步骤 3: 关闭数据库连接 (确保所有写入完成)
 	log.Println("💾 关闭数据库连接...")
