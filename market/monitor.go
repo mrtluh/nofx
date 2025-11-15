@@ -35,9 +35,9 @@ type WSMonitor struct {
 	oiHistoryMap    sync.Map      // P0修复：存储OI历史数据 map[symbol][]OISnapshot
 	oiStopChan      chan struct{} // P0修复：OI监控停止信号通道
 	batchSize       int
-	filterSymbols   sync.Map // 使用sync.Map来存储需要监控的币种和其状态
-	symbolStats     sync.Map // 存储币种统计信息
-	FilterSymbol    []string //经过筛选的币种
+	filterSymbols   sync.Map           // 使用sync.Map来存储需要监控的币种和其状态
+	symbolStats     sync.Map           // 存储币种统计信息
+	FilterSymbol    []string           //经过筛选的币种
 	dsManager       *DataSourceManager // 多数据源管理器（用于故障转移）
 }
 type SymbolStats struct {
